@@ -1,0 +1,31 @@
+{
+  "name": "simd-0266-estimator",
+  "status": "pre-mainnet-estimate",
+  "note": "CU estimates are based on the bundled SIMD-0266 estimator profile until p-token interfaces are finalized.",
+  "operations": {
+    "transfer": {
+      "legacyCu": 5200,
+      "pTokenCu": 220
+    },
+    "mint_to": {
+      "legacyCu": 6100,
+      "pTokenCu": 260
+    },
+    "burn": {
+      "legacyCu": 5700,
+      "pTokenCu": 250
+    },
+    "approve": {
+      "legacyCu": 4800,
+      "pTokenCu": 210
+    },
+    "close_account": {
+      "legacyCu": 5000,
+      "pTokenCu": 240
+    },
+    "initialize_account": {
+      "legacyCu": 7400,
+      "pTokenCu": 360
+    }
+  }
+}

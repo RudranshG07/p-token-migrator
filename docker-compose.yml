@@ -8,6 +8,7 @@ services:
       HOST: 0.0.0.0
       PORT: 4173
       JOB_STORE_PATH: /app/data/jobs.json
+      PTOKEN_PROFILE_PATH: ""
       ALLOW_SERVER_PATH_SCAN: "0"
       STORE_FULL_MANIFESTS: "0"
       JOB_RETENTION_LIMIT: "100"

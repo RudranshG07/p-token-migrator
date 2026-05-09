@@ -21,6 +21,7 @@ GET /api/health
 ```
 
 Returns service mode, whether server-path scanning is enabled, and the bundled sample path.
+It also returns the active benchmark profile name.
 
 ## Readiness
 

@@ -16,8 +16,16 @@ type SimulationStatus = "passed" | "review_required";
 interface TokenPattern {
   op: Operation;
   regex: RegExp;
-  legacyCu: number;
-  pTokenCu: number;
+}
+
+export interface BenchmarkProfile {
+  name: string;
+  status: string;
+  note: string;
+  operations: Record<Operation, {
+    legacyCu: number;
+    pTokenCu: number;
+  }>;
 }
 
 export interface ProjectFile {
@@ -92,6 +100,7 @@ export interface SimulationReport {
 
 export interface ScanOptions {
   protocol?: string;
+  benchmarkProfile?: BenchmarkProfile;
 }
 
 export interface Job {
@@ -134,13 +143,27 @@ interface BuildFindingInput {
 }
 
 const TOKEN_PATTERNS: TokenPattern[] = [
-  { op: "transfer", regex: /\b(token::transfer|transfer_checked|TransferChecked|Transfer\s*\{|spl_token::instruction::transfer)\b/g, legacyCu: 5200, pTokenCu: 220 },
-  { op: "mint_to", regex: /\b(token::mint_to|MintTo\s*\{|spl_token::instruction::mint_to)\b/g, legacyCu: 6100, pTokenCu: 260 },
-  { op: "burn", regex: /\b(token::burn|Burn\s*\{|spl_token::instruction::burn)\b/g, legacyCu: 5700, pTokenCu: 250 },
-  { op: "approve", regex: /\b(token::approve|Approve\s*\{|spl_token::instruction::approve)\b/g, legacyCu: 4800, pTokenCu: 210 },
-  { op: "close_account", regex: /\b(token::close_account|CloseAccount\s*\{|spl_token::instruction::close_account)\b/g, legacyCu: 5000, pTokenCu: 240 },
-  { op: "initialize_account", regex: /\b(InitializeAccount|initialize_account|spl_token::instruction::initialize_account)\b/g, legacyCu: 7400, pTokenCu: 360 }
+  { op: "transfer", regex: /\b(token::transfer|transfer_checked|TransferChecked|Transfer\s*\{|spl_token::instruction::transfer)\b/g },
+  { op: "mint_to", regex: /\b(token::mint_to|MintTo\s*\{|spl_token::instruction::mint_to)\b/g },
+  { op: "burn", regex: /\b(token::burn|Burn\s*\{|spl_token::instruction::burn)\b/g },
+  { op: "approve", regex: /\b(token::approve|Approve\s*\{|spl_token::instruction::approve)\b/g },
+  { op: "close_account", regex: /\b(token::close_account|CloseAccount\s*\{|spl_token::instruction::close_account)\b/g },
+  { op: "initialize_account", regex: /\b(InitializeAccount|initialize_account|spl_token::instruction::initialize_account)\b/g }
 ];
+
+export const DEFAULT_BENCHMARK_PROFILE: BenchmarkProfile = {
+  name: "simd-0266-estimator",
+  status: "pre-mainnet-estimate",
+  note: "CU estimates are based on the bundled SIMD-0266 estimator profile until p-token interfaces are finalized.",
+  operations: {
+    transfer: { legacyCu: 5200, pTokenCu: 220 },
+    mint_to: { legacyCu: 6100, pTokenCu: 260 },
+    burn: { legacyCu: 5700, pTokenCu: 250 },
+    approve: { legacyCu: 4800, pTokenCu: 210 },
+    close_account: { legacyCu: 5000, pTokenCu: 240 },
+    initialize_account: { legacyCu: 7400, pTokenCu: 360 }
+  }
+};
 
 const IDL_ACCOUNT_PATTERN = /"name"\s*:\s*"tokenProgram"|"address"\s*:\s*"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"/g;
 const SUPPORTED_EXTENSIONS = new Set([".rs", ".json", ".toml"]);
@@ -179,11 +202,12 @@ export async function scanProject(projectPath: string, options: ScanOptions = {}
     relative: file.relative,
     content: await fs.readFile(file.absolute, "utf8")
   })));
-  return scanSourceFiles(sourceFiles, { protocol, root });
+  return scanSourceFiles(sourceFiles, { protocol, root, benchmarkProfile: options.benchmarkProfile });
 }
 
 export async function scanSourceFiles(files: SourceFile[], options: ScanOptions & { root?: string } = {}): Promise<Manifest> {
   const protocol = options.protocol || "Uploaded Project";
+  const benchmarkProfile = options.benchmarkProfile || DEFAULT_BENCHMARK_PROFILE;
   const findings: Finding[] = [];
   const idlHints: IdlHint[] = [];
 
@@ -200,13 +224,14 @@ export async function scanSourceFiles(files: SourceFile[], options: ScanOptions 
       for (const pattern of TOKEN_PATTERNS) {
         pattern.regex.lastIndex = 0;
         if (!pattern.regex.test(line)) continue;
+        const compute = benchmarkProfile.operations[pattern.op];
         findings.push(buildFinding({
           file: file.relative,
           line: index + 1,
           op: pattern.op,
           snippet: line.trim(),
-          legacyCu: pattern.legacyCu,
-          pTokenCu: pattern.pTokenCu,
+          legacyCu: compute.legacyCu,
+          pTokenCu: compute.pTokenCu,
           source
         }));
       }
@@ -227,9 +252,9 @@ export async function scanSourceFiles(files: SourceFile[], options: ScanOptions 
     protocol,
     root: options.root || "uploaded-sources",
     pTokenProfile: {
-      name: "simd-0266-estimator",
-      status: "pre-mainnet-estimate",
-      note: "CU estimates are based on the bundled SIMD-0266 estimator profile until p-token interfaces are finalized."
+      name: benchmarkProfile.name,
+      status: benchmarkProfile.status,
+      note: benchmarkProfile.note
     },
     totals: {
       ...totals,
@@ -241,6 +266,13 @@ export async function scanSourceFiles(files: SourceFile[], options: ScanOptions 
     findings,
     simulation
   };
+}
+
+export async function loadBenchmarkProfile(profilePath: string): Promise<BenchmarkProfile> {
+  const raw = await fs.readFile(profilePath, "utf8");
+  const parsed = JSON.parse(raw) as BenchmarkProfile;
+  validateBenchmarkProfile(parsed);
+  return parsed;
 }
 
 export function runDryRun(findings: Finding[], idlHints: IdlHint[] = []): SimulationReport {
@@ -422,6 +454,16 @@ function replacementAccounts(operation: Operation): string[] {
     "    destination: ctx.accounts.destination.to_account_info(),",
     "    authority: ctx.accounts.authority.to_account_info(),"
   ];
+}
+
+function validateBenchmarkProfile(profile: BenchmarkProfile): void {
+  const operations: Operation[] = ["transfer", "mint_to", "burn", "approve", "close_account", "initialize_account"];
+  for (const operation of operations) {
+    const entry = profile.operations?.[operation];
+    if (!entry || !Number.isFinite(entry.legacyCu) || !Number.isFinite(entry.pTokenCu)) {
+      throw new Error(`Invalid benchmark profile entry for ${operation}`);
+    }
+  }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {

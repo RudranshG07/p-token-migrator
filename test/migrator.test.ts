@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildReportSummary, getSampleProjectPath, scanProject, scanSourceFiles } from "../src/migrator.ts";
+import { buildReportSummary, DEFAULT_BENCHMARK_PROFILE, getSampleProjectPath, scanProject, scanSourceFiles } from "../src/migrator.ts";
 
 test("sample project produces a migration manifest", async () => {
   const manifest = await scanProject(getSampleProjectPath(), { protocol: "Test Vault" });
@@ -47,4 +47,22 @@ test("uploaded sources can be scanned without server filesystem access", async (
   assert.equal(manifest.root, "uploaded-sources");
   assert.equal(manifest.totals.callSites, 1);
   assert.equal(manifest.idlHints.length, 1);
+});
+
+test("custom benchmark profiles control compute estimates", async () => {
+  const profile = structuredClone(DEFAULT_BENCHMARK_PROFILE);
+  profile.name = "test-profile";
+  profile.operations.transfer = { legacyCu: 1000, pTokenCu: 100 };
+
+  const manifest = await scanSourceFiles([
+    {
+      relative: "programs/vault/src/lib.rs",
+      content: "pub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
+    }
+  ], { protocol: "Profile Vault", benchmarkProfile: profile });
+
+  assert.equal(manifest.pTokenProfile.name, "test-profile");
+  assert.equal(manifest.totals.legacyCu, 1000);
+  assert.equal(manifest.totals.pTokenCu, 100);
+  assert.equal(manifest.totals.savedCu, 900);
 });

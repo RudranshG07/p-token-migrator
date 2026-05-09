@@ -28,6 +28,7 @@ docker compose up --build
 - Mount `/app/data` to durable storage or replace the JSON job store with a database.
 - Keep `STORE_FULL_MANIFESTS=0` unless users explicitly agree to persisted source snippets.
 - Set `MAX_BODY_BYTES` to the largest project upload you want to support.
+- Set `PTOKEN_PROFILE_PATH` when you have a validated benchmark profile JSON.
 - Set `RATE_LIMIT_MAX` and also add rate limiting at the reverse proxy or platform edge.
 - Set `API_KEY` if you want to restrict write/scan API access during beta. Dashboard users can enter this key before scanning.
 - Set up logs and uptime checks against `/api/ready`.
@@ -35,6 +36,16 @@ docker compose up --build
 ## Reverse Proxy
 
 Forward traffic to the app on `PORT` and preserve the original host header. The app serves the dashboard and API from the same origin.
+
+## Benchmark Profiles
+
+The bundled profile lives at `profiles/simd-0266-estimator.json`. Once p-token interfaces and benchmarks are finalized, create a new profile with the same shape and set:
+
+```bash
+PTOKEN_PROFILE_PATH=/app/profiles/mainnet-profile.json
+```
+
+The profile controls CU estimates only. It does not change scanner detection rules.
 
 ## First Public Launch Checklist
 

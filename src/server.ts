@@ -3,7 +3,8 @@ import { promises as fs } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSampleProjectPath, readJobs, saveJob, scanProject, scanSourceFiles, type SourceFile } from "./migrator.ts";
+import { getSampleProjectPath, loadBenchmarkProfile, scanProject, scanSourceFiles, type BenchmarkProfile, type SourceFile } from "./migrator.ts";
+import { createFileJobStore } from "./storage.ts";
 
 interface ScanBody {
   protocol?: string;
@@ -23,12 +24,15 @@ const host = process.env.HOST || (isProduction ? "0.0.0.0" : "127.0.0.1");
 const allowServerPathScan = process.env.ALLOW_SERVER_PATH_SCAN === "1" || !isProduction;
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 10 * 1024 * 1024);
 const jobStorePath = process.env.JOB_STORE_PATH || "data/jobs.json";
+const benchmarkProfilePath = process.env.PTOKEN_PROFILE_PATH || "";
 const storeFullManifests = process.env.STORE_FULL_MANIFESTS === "1" || !isProduction;
 const apiKey = process.env.API_KEY || "";
 const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000);
 const rateLimitMax = Number(process.env.RATE_LIMIT_MAX || (isProduction ? 20 : 200));
 const jobRetentionLimit = Number(process.env.JOB_RETENTION_LIMIT || 100);
 const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
+const jobStore = createFileJobStore(jobStorePath);
+let benchmarkProfile: BenchmarkProfile | undefined;
 
 export interface RequestPolicyInput {
   method?: string;
@@ -64,24 +68,24 @@ export function createServer(): http.Server {
             windowMs: rateLimitWindowMs,
             max: rateLimitMax
           },
+          benchmarkProfile: benchmarkProfile?.name || "bundled-default",
           sampleProject: getSampleProjectPath()
         });
       }
 
       if (req.method === "GET" && url.pathname === "/api/ready") {
-        await readJobs(jobStorePath);
+        await jobStore.list();
         return sendJson(res, { ok: true });
       }
 
       if (req.method === "GET" && url.pathname === "/api/jobs") {
-        const jobs = await readJobs(jobStorePath);
+        const jobs = await jobStore.list();
         return sendJson(res, { jobs: storeFullManifests ? jobs : jobs.map(stripStoredManifest) });
       }
 
       if (req.method === "GET" && url.pathname.startsWith("/api/reports/")) {
         const reportId = decodeURIComponent(url.pathname.replace("/api/reports/", ""));
-        const jobs = await readJobs(jobStorePath);
-        const job = jobs.find((item) => item.id === reportId);
+        const job = await jobStore.find(reportId);
         if (!job) return sendJson(res, { error: "Report not found" }, 404);
         return sendJson(res, { report: job.report });
       }
@@ -92,8 +96,8 @@ export function createServer(): http.Server {
         if (projectPath !== getSampleProjectPath() && !allowServerPathScan) {
           return sendJson(res, { error: "Server path scanning is disabled on this deployment. Upload source files instead." }, 403);
         }
-        const manifest = await scanProject(projectPath, { protocol: body.protocol });
-        const job = await saveJob(manifest, jobStorePath, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
+        const manifest = await scanProject(projectPath, { protocol: body.protocol, benchmarkProfile });
+        const job = await jobStore.save(manifest, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
         return sendJson(res, { job, manifest });
       }
 
@@ -103,13 +107,13 @@ export function createServer(): http.Server {
         if (!files.length) {
           return sendJson(res, { error: "Upload at least one Rust, IDL JSON, or TOML file." }, 400);
         }
-        const manifest = await scanSourceFiles(files, { protocol: body.protocol || "Uploaded Project" });
-        const job = await saveJob(manifest, jobStorePath, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
+        const manifest = await scanSourceFiles(files, { protocol: body.protocol || "Uploaded Project", benchmarkProfile });
+        const job = await jobStore.save(manifest, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
         return sendJson(res, { job, manifest });
       }
 
       if (req.method === "GET" && url.pathname === "/api/sample") {
-        const manifest = await scanProject(getSampleProjectPath(), { protocol: "Sample Vault" });
+        const manifest = await scanProject(getSampleProjectPath(), { protocol: "Sample Vault", benchmarkProfile });
         return sendJson(res, { manifest });
       }
 
@@ -122,9 +126,15 @@ export function createServer(): http.Server {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await loadConfiguredBenchmarkProfile();
   createServer().listen(port, host, () => {
     console.log(`p-token migrator running at http://${host}:${port}`);
   });
+}
+
+async function loadConfiguredBenchmarkProfile(): Promise<void> {
+  if (!benchmarkProfilePath) return;
+  benchmarkProfile = await loadBenchmarkProfile(benchmarkProfilePath);
 }
 
 async function serveStatic(requestPath: string, res: ServerResponse): Promise<void> {
