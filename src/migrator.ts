@@ -100,7 +100,22 @@ export interface Job {
   createdAt: string;
   totals: Manifest["totals"];
   simulation: SimulationReport;
+  report: ReportSummary;
   manifest?: Manifest;
+}
+
+export interface ReportSummary {
+  id?: string;
+  protocol: string;
+  generatedAt: string;
+  totals: Manifest["totals"];
+  simulation: SimulationReport;
+  operations: Record<string, number>;
+  risks: Record<RiskLevel, number>;
+  files: Array<{
+    file: string;
+    findings: number;
+  }>;
 }
 
 export interface SaveJobOptions {
@@ -281,12 +296,14 @@ export async function readJobs(storePath = "data/jobs.json"): Promise<Job[]> {
 export async function saveJob(manifest: Manifest, storePath = "data/jobs.json", options: SaveJobOptions = {}): Promise<Job> {
   await fs.mkdir(path.dirname(storePath), { recursive: true });
   const jobs = await readJobs(storePath);
+  const id = `job_${Date.now()}`;
   const job: Job = {
-    id: `job_${Date.now()}`,
+    id,
     protocol: manifest.protocol,
     createdAt: manifest.generatedAt,
     totals: manifest.totals,
-    simulation: manifest.simulation
+    simulation: manifest.simulation,
+    report: buildReportSummary(manifest, id)
   };
   if (options.storeManifest) {
     job.manifest = manifest;
@@ -294,6 +311,32 @@ export async function saveJob(manifest: Manifest, storePath = "data/jobs.json", 
   jobs.unshift(job);
   await fs.writeFile(storePath, JSON.stringify(jobs.slice(0, options.retentionLimit || 25), null, 2));
   return job;
+}
+
+export function buildReportSummary(manifest: Manifest, id?: string): ReportSummary {
+  const operations: Record<string, number> = {};
+  const risks: Record<RiskLevel, number> = { low: 0, medium: 0, high: 0 };
+  const fileCounts = new Map<string, number>();
+
+  for (const finding of manifest.findings) {
+    operations[finding.operation] = (operations[finding.operation] || 0) + 1;
+    risks[finding.risk.level] += 1;
+    fileCounts.set(finding.file, (fileCounts.get(finding.file) || 0) + 1);
+  }
+
+  return {
+    id,
+    protocol: manifest.protocol,
+    generatedAt: manifest.generatedAt,
+    totals: manifest.totals,
+    simulation: manifest.simulation,
+    operations,
+    risks,
+    files: Array.from(fileCounts.entries())
+      .map(([file, findings]) => ({ file, findings }))
+      .sort((a, b) => b.findings - a.findings || a.file.localeCompare(b.file))
+      .slice(0, 20)
+  };
 }
 
 function buildFinding({ file, line, op, snippet, legacyCu, pTokenCu, source }: BuildFindingInput): Finding {

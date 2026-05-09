@@ -18,7 +18,7 @@ Do not set `ALLOW_SERVER_PATH_SCAN=1` on a public deployment. That mode is only 
 
 ## Data Handling
 
-Uploaded source contents are scanned in memory. Public production defaults store only job summaries. If `STORE_FULL_MANIFESTS=1`, saved jobs include snippets and replacement guidance, so treat `JOB_STORE_PATH` as sensitive.
+Uploaded source contents are scanned in memory. Public production defaults store only job summaries and public reports. If `STORE_FULL_MANIFESTS=1`, saved jobs include snippets and replacement guidance, so treat `JOB_STORE_PATH` as sensitive.
 
 ## Production Gaps
 

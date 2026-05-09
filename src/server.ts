@@ -78,6 +78,14 @@ export function createServer(): http.Server {
         return sendJson(res, { jobs: storeFullManifests ? jobs : jobs.map(stripStoredManifest) });
       }
 
+      if (req.method === "GET" && url.pathname.startsWith("/api/reports/")) {
+        const reportId = decodeURIComponent(url.pathname.replace("/api/reports/", ""));
+        const jobs = await readJobs(jobStorePath);
+        const job = jobs.find((item) => item.id === reportId);
+        if (!job) return sendJson(res, { error: "Report not found" }, 404);
+        return sendJson(res, { report: job.report });
+      }
+
       if (req.method === "POST" && url.pathname === "/api/scan") {
         const body = await readBody<ScanBody>(req);
         const projectPath = body.projectPath === "sample" || !body.projectPath ? getSampleProjectPath() : body.projectPath;
@@ -127,6 +135,20 @@ async function serveStatic(requestPath: string, res: ServerResponse): Promise<vo
     return;
   }
 
+  if (requestPath === "/report.js") {
+    const source = await fs.readFile(path.join(publicDir, "report.ts"), "utf8");
+    res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
+    res.end(stripTypeScriptTypes(source, { mode: "strip" }));
+    return;
+  }
+
+  if (requestPath.startsWith("/reports/")) {
+    const content = await fs.readFile(path.join(publicDir, "report.html"));
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(content);
+    return;
+  }
+
   const safePath = requestPath === "/" ? "/index.html" : requestPath;
   const absolute = path.resolve(publicDir, `.${safePath}`);
   if (!absolute.startsWith(publicDir)) {
@@ -172,7 +194,7 @@ function isStaticRoute(pathname: string): boolean {
 
 function isPublicApiRoute(method: string | undefined, pathname: string): boolean {
   if (method !== "GET") return false;
-  return ["/api/health", "/api/ready", "/api/jobs", "/api/sample"].includes(pathname);
+  return ["/api/health", "/api/ready", "/api/jobs", "/api/sample"].includes(pathname) || pathname.startsWith("/api/reports/");
 }
 
 function enforceApiKey(authorization: string | undefined, apiKeyHeader: string | undefined, apiKey: string): void {

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Migration Report · p-token Migration Toolkit</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Public migration report</p>
+        <h1 id="reportTitle">Migration Report</h1>
+      </div>
+      <a class="secondary-link" href="/">New scan</a>
+    </header>
+
+    <main class="shell">
+      <section class="metrics-grid" aria-label="Report metrics">
+        <article class="metric">
+          <span>Call sites</span>
+          <strong id="reportCallSites">0</strong>
+        </article>
+        <article class="metric">
+          <span>Legacy CU</span>
+          <strong id="reportLegacyCu">0</strong>
+        </article>
+        <article class="metric">
+          <span>p-token CU</span>
+          <strong id="reportPtokenCu">0</strong>
+        </article>
+        <article class="metric">
+          <span>Estimated savings</span>
+          <strong id="reportSavings">0%</strong>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <div class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Breakdown</p>
+              <h2>Operations and risk</h2>
+            </div>
+          </div>
+          <div id="reportBreakdown" class="list empty-state">
+            <p>Loading report</p>
+            <span>Fetching the public scan summary.</span>
+          </div>
+        </div>
+
+        <aside class="panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Files</p>
+              <h2>Most affected files</h2>
+            </div>
+          </div>
+          <div id="reportFiles" class="jobs-list empty-state">
+            <p>No files yet</p>
+            <span>Files appear after the report loads.</span>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="/report.js"></script>
+  </body>
+</html>

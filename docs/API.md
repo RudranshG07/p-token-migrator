@@ -78,3 +78,11 @@ GET /api/jobs
 ```
 
 Returns the latest saved scan jobs. The default store is `data/jobs.json`.
+
+## Public Report
+
+```http
+GET /api/reports/:id
+```
+
+Returns a public summary for a saved scan job. This endpoint exposes aggregate operation counts, risk counts, affected files, and CU totals. It does not expose snippets or replacement patches when `STORE_FULL_MANIFESTS=0`.

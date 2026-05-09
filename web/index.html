@@ -31,9 +31,13 @@
           <label for="protocol">Protocol name</label>
           <input id="protocol" name="protocol" type="text" autocomplete="organization" value="Sample Vault">
 
+          <label for="apiKey">API key</label>
+          <input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="Required only for protected deployments">
+
           <label for="sourceFiles">Source files</label>
           <input id="sourceFiles" name="sourceFiles" type="file" webkitdirectory multiple>
           <p class="help-text">Upload a project folder from your browser. Only Rust, JSON, and TOML files are sent.</p>
+          <div id="uploadSummary" class="upload-summary" aria-live="polite"></div>
 
           <label for="projectPath">Server path</label>
           <div class="path-row">
@@ -77,7 +81,10 @@
               <p class="eyebrow">Manifest</p>
               <h2 id="findings-title">Detected call sites</h2>
             </div>
-            <button id="downloadManifest" type="button" class="secondary-button" disabled>Download JSON</button>
+            <div class="button-row">
+              <a id="reportLink" class="secondary-link disabled" href="#" aria-disabled="true">Open report</a>
+              <button id="downloadManifest" type="button" class="secondary-button" disabled>Download JSON</button>
+            </div>
           </div>
           <div id="findingsList" class="list empty-state">
             <p>No scan yet</p>

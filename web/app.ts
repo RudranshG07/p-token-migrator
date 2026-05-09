@@ -41,11 +41,13 @@ interface Manifest {
 }
 
 interface Job {
+  id: string;
   protocol: string;
   totals: ComputeTotals;
 }
 
 interface ScanResponse {
+  job: Job;
   manifest: Manifest;
 }
 
@@ -65,13 +67,16 @@ const elements = {
   apiStatus: requiredElement<HTMLElement>("#apiStatus"),
   form: requiredElement<HTMLFormElement>("#scanForm"),
   protocol: requiredElement<HTMLInputElement>("#protocol"),
+  apiKey: requiredElement<HTMLInputElement>("#apiKey"),
   projectPath: requiredElement<HTMLInputElement>("#projectPath"),
   sourceFiles: requiredElement<HTMLInputElement>("#sourceFiles"),
+  uploadSummary: requiredElement<HTMLElement>("#uploadSummary"),
   sampleButton: requiredElement<HTMLButtonElement>("#sampleButton"),
   scanButton: requiredElement<HTMLButtonElement>("#scanButton"),
   message: requiredElement<HTMLElement>("#message"),
   refreshJobs: requiredElement<HTMLButtonElement>("#refreshJobs"),
   downloadManifest: requiredElement<HTMLButtonElement>("#downloadManifest"),
+  reportLink: requiredElement<HTMLAnchorElement>("#reportLink"),
   findingsList: requiredElement<HTMLElement>("#findingsList"),
   simulation: requiredElement<HTMLElement>("#simulation"),
   jobsList: requiredElement<HTMLElement>("#jobsList"),
@@ -90,6 +95,12 @@ elements.form.addEventListener("submit", async (event: SubmitEvent) => {
 elements.sampleButton.addEventListener("click", () => {
   elements.projectPath.value = "sample";
   elements.protocol.value = "Sample Vault";
+  elements.sourceFiles.value = "";
+  renderUploadSummary(null);
+});
+
+elements.sourceFiles.addEventListener("change", () => {
+  renderUploadSummary(elements.sourceFiles.files);
 });
 
 elements.refreshJobs.addEventListener("click", loadJobs);
@@ -123,11 +134,11 @@ async function runScan(): Promise<void> {
     const body = uploadedFiles.length ? { protocol: payload.protocol, files: uploadedFiles } : payload;
     const response = await requestJson<ScanResponse>(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: scanHeaders(),
       body: JSON.stringify(body)
     });
     state.manifest = response.manifest;
-    renderManifest(response.manifest);
+    renderManifest(response.manifest, response.job);
     await loadJobs();
     showMessage(`Scan complete: ${response.manifest.totals.callSites} call sites found.`);
   } catch (error) {
@@ -135,6 +146,13 @@ async function runScan(): Promise<void> {
   } finally {
     setLoading(false);
   }
+}
+
+function scanHeaders(): HeadersInit {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const key = elements.apiKey.value.trim();
+  if (key) headers["X-API-Key"] = key;
+  return headers;
 }
 
 async function readSelectedFiles(fileList: FileList | null): Promise<Array<{ relative: string; content: string }>> {
@@ -149,6 +167,22 @@ async function readSelectedFiles(fileList: FileList | null): Promise<Array<{ rel
     relative: relativePath(file),
     content: await file.text()
   })));
+}
+
+function renderUploadSummary(fileList: FileList | null): void {
+  const files = Array.from(fileList || []);
+  if (!files.length) {
+    elements.uploadSummary.textContent = "";
+    return;
+  }
+
+  const supported = files.filter((file) => [".rs", ".json", ".toml"].includes(file.name.slice(file.name.lastIndexOf("."))) && !ignoredPath(relativePath(file)));
+  const totalBytes = supported.reduce((sum, file) => sum + file.size, 0);
+  const skipped = files.length - supported.length;
+  const parts = [`${formatNumber(supported.length)} files`, `${formatBytes(totalBytes)}`];
+  if (skipped > 0) parts.push(`${formatNumber(skipped)} skipped`);
+  if (supported.length > 500) parts.push("first 500 files will be scanned");
+  elements.uploadSummary.textContent = parts.join(" · ");
 }
 
 function relativePath(file: File): string {
@@ -170,11 +204,16 @@ async function loadJobs(): Promise<void> {
   }
 }
 
-function renderManifest(manifest: Manifest): void {
+function renderManifest(manifest: Manifest, job?: Job): void {
   renderMetrics(manifest.totals);
   renderFindings(manifest.findings);
   renderSimulation(manifest.simulation);
   elements.downloadManifest.disabled = false;
+  if (job?.id) {
+    elements.reportLink.href = `/reports/${encodeURIComponent(job.id)}`;
+    elements.reportLink.classList.remove("disabled");
+    elements.reportLink.removeAttribute("aria-disabled");
+  }
 }
 
 function renderMetrics(totals: ComputeTotals): void {
@@ -234,7 +273,7 @@ function renderJobs(jobs: Job[]): void {
 
   elements.jobsList.className = "jobs-list";
   elements.jobsList.innerHTML = jobs.slice(0, 6).map((job) => (
-    `<div class="job-row"><strong>${escapeHtml(job.protocol)}</strong><span>${formatNumber(job.totals.callSites)} call sites · ${job.totals.savingsPercent}% savings</span></div>`
+    `<a class="job-row" href="/reports/${encodeURIComponent(job.id)}"><strong>${escapeHtml(job.protocol)}</strong><span>${formatNumber(job.totals.callSites)} call sites · ${job.totals.savingsPercent}% savings</span></a>`
   )).join("");
 }
 
@@ -269,6 +308,12 @@ function showMessage(text: string, isError = false): void {
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US").format(value || 0);
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.round(value / 102.4) / 10} KB`;
+  return `${Math.round(value / 1024 / 102.4) / 10} MB`;
 }
 
 function operationLabel(operation: string): string {

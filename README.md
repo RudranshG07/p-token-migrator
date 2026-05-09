@@ -24,6 +24,7 @@ docker compose up --build
 ```
 
 Production deployments should keep `ALLOW_SERVER_PATH_SCAN=0` and use browser uploads through `/api/scan-sources`.
+If `API_KEY` is configured, users can enter it in the dashboard before starting a scan.
 
 ## Run the Rust CLI
 
@@ -51,7 +52,7 @@ cargo test --manifest-path cli/Cargo.toml
 3. Produce a migration manifest with file, line, operation, confidence, legacy CU estimate, p-token CU estimate, savings, risk level, and replacement guidance.
 4. Run a deterministic dry-run simulator that flags behavioral divergence risks.
 5. Persist scan jobs under the configured `JOB_STORE_PATH`.
-6. Render a dashboard with aggregate CU savings, protocol runs, findings, replacement guidance, and downloadable manifests.
+6. Render a dashboard with aggregate CU savings, protocol runs, findings, replacement guidance, downloadable manifests, and shareable report summaries.
 
 For deployment and API details, see:
 
