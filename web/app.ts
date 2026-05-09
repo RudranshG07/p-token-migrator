@@ -66,6 +66,7 @@ const elements = {
   form: requiredElement<HTMLFormElement>("#scanForm"),
   protocol: requiredElement<HTMLInputElement>("#protocol"),
   projectPath: requiredElement<HTMLInputElement>("#projectPath"),
+  sourceFiles: requiredElement<HTMLInputElement>("#sourceFiles"),
   sampleButton: requiredElement<HTMLButtonElement>("#sampleButton"),
   scanButton: requiredElement<HTMLButtonElement>("#scanButton"),
   message: requiredElement<HTMLElement>("#message"),
@@ -117,10 +118,13 @@ async function runScan(): Promise<void> {
       protocol: elements.protocol.value.trim(),
       projectPath: elements.projectPath.value.trim()
     };
-    const response = await requestJson<ScanResponse>("/api/scan", {
+    const uploadedFiles = await readSelectedFiles(elements.sourceFiles.files);
+    const endpoint = uploadedFiles.length ? "/api/scan-sources" : "/api/scan";
+    const body = uploadedFiles.length ? { protocol: payload.protocol, files: uploadedFiles } : payload;
+    const response = await requestJson<ScanResponse>(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(body)
     });
     state.manifest = response.manifest;
     renderManifest(response.manifest);
@@ -131,6 +135,28 @@ async function runScan(): Promise<void> {
   } finally {
     setLoading(false);
   }
+}
+
+async function readSelectedFiles(fileList: FileList | null): Promise<Array<{ relative: string; content: string }>> {
+  const files = Array.from(fileList || []);
+  const supported = new Set([".rs", ".json", ".toml"]);
+  const selected = files
+    .filter((file) => supported.has(file.name.slice(file.name.lastIndexOf("."))))
+    .filter((file) => !ignoredPath(relativePath(file)))
+    .slice(0, 500);
+
+  return Promise.all(selected.map(async (file) => ({
+    relative: relativePath(file),
+    content: await file.text()
+  })));
+}
+
+function relativePath(file: File): string {
+  return (file.webkitRelativePath || file.name).replaceAll("\\", "/");
+}
+
+function ignoredPath(filePath: string): boolean {
+  return filePath.split("/").some((part) => ["node_modules", "target", ".git", "dist", ".next"].includes(part));
 }
 
 async function loadJobs(): Promise<void> {

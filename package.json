@@ -1,8 +1,9 @@
 {
   "name": "p-token-migrator",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "End-to-end p-token migration toolkit with scanner, simulator, dashboard, and Rust CLI.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning src/server.ts",
@@ -11,6 +12,6 @@
     "cli:sample": "cargo run --manifest-path cli/Cargo.toml -- scan samples/anchor-token-vault --out data/cli-sample-manifest.json"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=25"
   }
 }

@@ -1,0 +1,17 @@
+services:
+  p-token-migrator:
+    build: .
+    ports:
+      - "4173:4173"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 4173
+      JOB_STORE_PATH: /app/data/jobs.json
+      ALLOW_SERVER_PATH_SCAN: "0"
+      STORE_FULL_MANIFESTS: "0"
+    volumes:
+      - p-token-migrator-data:/app/data
+
+volumes:
+  p-token-migrator-data:

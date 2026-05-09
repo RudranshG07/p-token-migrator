@@ -25,6 +25,11 @@ export interface ProjectFile {
   relative: string;
 }
 
+export interface SourceFile {
+  relative: string;
+  content: string;
+}
+
 export interface IdlHint {
   file: string;
   type: "legacy_token_program_reference";
@@ -95,7 +100,11 @@ export interface Job {
   createdAt: string;
   totals: Manifest["totals"];
   simulation: SimulationReport;
-  manifest: Manifest;
+  manifest?: Manifest;
+}
+
+export interface SaveJobOptions {
+  storeManifest?: boolean;
 }
 
 interface BuildFindingInput {
@@ -150,11 +159,20 @@ export async function scanProject(projectPath: string, options: ScanOptions = {}
   const root = path.resolve(projectPath);
   const protocol = options.protocol || inferProtocolName(root);
   const files = await listProjectFiles(root);
+  const sourceFiles = await Promise.all(files.map(async (file) => ({
+    relative: file.relative,
+    content: await fs.readFile(file.absolute, "utf8")
+  })));
+  return scanSourceFiles(sourceFiles, { protocol, root });
+}
+
+export async function scanSourceFiles(files: SourceFile[], options: ScanOptions & { root?: string } = {}): Promise<Manifest> {
+  const protocol = options.protocol || "Uploaded Project";
   const findings: Finding[] = [];
   const idlHints: IdlHint[] = [];
 
   for (const file of files) {
-    const source = await fs.readFile(file.absolute, "utf8");
+    const source = file.content;
     const lines = source.split(/\r?\n/);
 
     if (file.relative.endsWith(".json")) {
@@ -191,7 +209,7 @@ export async function scanProject(projectPath: string, options: ScanOptions = {}
     schemaVersion: "0.1.0",
     generatedAt: new Date().toISOString(),
     protocol,
-    root,
+    root: options.root || "uploaded-sources",
     pTokenProfile: {
       name: "simd-0266-estimator",
       status: "pre-mainnet-estimate",
@@ -259,7 +277,7 @@ export async function readJobs(storePath = "data/jobs.json"): Promise<Job[]> {
   }
 }
 
-export async function saveJob(manifest: Manifest, storePath = "data/jobs.json"): Promise<Job> {
+export async function saveJob(manifest: Manifest, storePath = "data/jobs.json", options: SaveJobOptions = {}): Promise<Job> {
   await fs.mkdir(path.dirname(storePath), { recursive: true });
   const jobs = await readJobs(storePath);
   const job: Job = {
@@ -267,9 +285,11 @@ export async function saveJob(manifest: Manifest, storePath = "data/jobs.json"):
     protocol: manifest.protocol,
     createdAt: manifest.generatedAt,
     totals: manifest.totals,
-    simulation: manifest.simulation,
-    manifest
+    simulation: manifest.simulation
   };
+  if (options.storeManifest) {
+    job.manifest = manifest;
+  }
   jobs.unshift(job);
   await fs.writeFile(storePath, JSON.stringify(jobs.slice(0, 25), null, 2));
   return job;

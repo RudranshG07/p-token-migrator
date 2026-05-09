@@ -31,12 +31,16 @@
           <label for="protocol">Protocol name</label>
           <input id="protocol" name="protocol" type="text" autocomplete="organization" value="Sample Vault">
 
-          <label for="projectPath">Project path</label>
+          <label for="sourceFiles">Source files</label>
+          <input id="sourceFiles" name="sourceFiles" type="file" webkitdirectory multiple>
+          <p class="help-text">Upload a project folder from your browser. Only Rust, JSON, and TOML files are sent.</p>
+
+          <label for="projectPath">Server path</label>
           <div class="path-row">
             <input id="projectPath" name="projectPath" type="text" autocomplete="off" value="sample" aria-describedby="pathHelp">
             <button id="sampleButton" type="button" class="secondary-button">Use sample</button>
           </div>
-          <p id="pathHelp" class="help-text">Use <code>sample</code> or enter an absolute path to an Anchor/Rust project on this machine.</p>
+          <p id="pathHelp" class="help-text">Use <code>sample</code> for the bundled demo. Public deployments disable arbitrary server paths.</p>
 
           <button id="scanButton" type="submit" class="primary-button">
             <span aria-hidden="true">▶</span>
