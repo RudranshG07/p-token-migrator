@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>p-token Migration Toolkit</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">SIMD-0266 migration workspace</p>
+        <h1>p-token Migration Toolkit</h1>
+      </div>
+      <button id="refreshJobs" class="icon-button" type="button" aria-label="Refresh jobs" title="Refresh jobs">
+        <span aria-hidden="true">↻</span>
+      </button>
+    </header>
+
+    <main class="shell">
+      <section class="panel scan-panel" aria-labelledby="scan-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Scanner</p>
+            <h2 id="scan-title">Run migration analysis</h2>
+          </div>
+          <span id="apiStatus" class="status-pill">Checking API</span>
+        </div>
+
+        <form id="scanForm" class="scan-form">
+          <label for="protocol">Protocol name</label>
+          <input id="protocol" name="protocol" type="text" autocomplete="organization" value="Sample Vault">
+
+          <label for="projectPath">Project path</label>
+          <div class="path-row">
+            <input id="projectPath" name="projectPath" type="text" autocomplete="off" value="sample" aria-describedby="pathHelp">
+            <button id="sampleButton" type="button" class="secondary-button">Use sample</button>
+          </div>
+          <p id="pathHelp" class="help-text">Use <code>sample</code> or enter an absolute path to an Anchor/Rust project on this machine.</p>
+
+          <button id="scanButton" type="submit" class="primary-button">
+            <span aria-hidden="true">▶</span>
+            Scan project
+          </button>
+        </form>
+
+        <div id="message" class="message" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="metrics-grid" aria-label="Migration metrics">
+        <article class="metric">
+          <span>Call sites</span>
+          <strong id="metricCallSites">0</strong>
+        </article>
+        <article class="metric">
+          <span>Legacy CU</span>
+          <strong id="metricLegacyCu">0</strong>
+        </article>
+        <article class="metric">
+          <span>p-token CU</span>
+          <strong id="metricPtokenCu">0</strong>
+        </article>
+        <article class="metric">
+          <span>Estimated savings</span>
+          <strong id="metricSavings">0%</strong>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <div class="panel findings-panel" aria-labelledby="findings-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Manifest</p>
+              <h2 id="findings-title">Detected call sites</h2>
+            </div>
+            <button id="downloadManifest" type="button" class="secondary-button" disabled>Download JSON</button>
+          </div>
+          <div id="findingsList" class="list empty-state">
+            <p>No scan yet</p>
+            <span>Run the sample project to see SPL Token CPI findings.</span>
+          </div>
+        </div>
+
+        <aside class="panel side-panel" aria-labelledby="sim-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Dry-run</p>
+              <h2 id="sim-title">Simulation report</h2>
+            </div>
+          </div>
+          <div id="simulation" class="simulation empty-state">
+            <p>No simulation yet</p>
+            <span>The dry-run report appears after a scan.</span>
+          </div>
+
+          <div class="jobs">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">History</p>
+                <h2>Recent runs</h2>
+              </div>
+            </div>
+            <div id="jobsList" class="jobs-list empty-state">
+              <p>No runs saved</p>
+              <span>Completed scans are stored locally.</span>
+            </div>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <template id="findingTemplate">
+      <article class="finding">
+        <div class="finding-header">
+          <div>
+            <h3></h3>
+            <p class="file-line"></p>
+          </div>
+          <span class="risk"></span>
+        </div>
+        <pre class="snippet"></pre>
+        <div class="cu-row">
+          <span class="legacy"></span>
+          <span class="ptoken"></span>
+          <strong class="saved"></strong>
+        </div>
+        <details>
+          <summary>Shim replacement guidance</summary>
+          <pre class="patch"></pre>
+        </details>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
