@@ -66,3 +66,40 @@ test("custom benchmark profiles control compute estimates", async () => {
   assert.equal(manifest.totals.pTokenCu, 100);
   assert.equal(manifest.totals.savedCu, 900);
 });
+
+test("scanner ignores comments and strings", async () => {
+  const manifest = await scanSourceFiles([
+    {
+      relative: "programs/vault/src/lib.rs",
+      content: [
+        "pub fn ignored() {",
+        "  // token::transfer(cpi_ctx, amount)?;",
+        "  let text = \"token::burn(cpi_ctx, amount)?\";",
+        "  /* token::mint_to(cpi_ctx, amount)?; */",
+        "}"
+      ].join("\n")
+    }
+  ], { protocol: "Comment Vault" });
+
+  assert.equal(manifest.totals.callSites, 0);
+});
+
+test("scanner detects aliased token modules", async () => {
+  const manifest = await scanSourceFiles([
+    {
+      relative: "programs/vault/src/lib.rs",
+      content: [
+        "use anchor_spl::token as spl_token_cpi;",
+        "use spl_token::instruction as token_ix;",
+        "pub fn run() {",
+        "  spl_token_cpi::burn(cpi_ctx, amount)?;",
+        "  token_ix::approve(program_id, source, delegate, owner, &[], amount)?;",
+        "}"
+      ].join("\n")
+    }
+  ], { protocol: "Alias Vault" });
+
+  assert.equal(manifest.totals.callSites, 2);
+  assert.ok(manifest.findings.some((finding) => finding.operation === "burn"));
+  assert.ok(manifest.findings.some((finding) => finding.operation === "approve"));
+});

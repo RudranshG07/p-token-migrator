@@ -12,10 +12,12 @@ type Operation =
 type Confidence = "high" | "medium";
 type RiskLevel = "low" | "medium" | "high";
 type SimulationStatus = "passed" | "review_required";
+type PatternKind = "anchor_cpi" | "spl_instruction";
 
 interface TokenPattern {
   op: Operation;
-  regex: RegExp;
+  anchorNames: string[];
+  splNames: string[];
 }
 
 export interface BenchmarkProfile {
@@ -140,15 +142,16 @@ interface BuildFindingInput {
   legacyCu: number;
   pTokenCu: number;
   source: string;
+  kind: PatternKind;
 }
 
 const TOKEN_PATTERNS: TokenPattern[] = [
-  { op: "transfer", regex: /\b(token::transfer|transfer_checked|TransferChecked|Transfer\s*\{|spl_token::instruction::transfer)\b/g },
-  { op: "mint_to", regex: /\b(token::mint_to|MintTo\s*\{|spl_token::instruction::mint_to)\b/g },
-  { op: "burn", regex: /\b(token::burn|Burn\s*\{|spl_token::instruction::burn)\b/g },
-  { op: "approve", regex: /\b(token::approve|Approve\s*\{|spl_token::instruction::approve)\b/g },
-  { op: "close_account", regex: /\b(token::close_account|CloseAccount\s*\{|spl_token::instruction::close_account)\b/g },
-  { op: "initialize_account", regex: /\b(InitializeAccount|initialize_account|spl_token::instruction::initialize_account)\b/g }
+  { op: "transfer", anchorNames: ["transfer", "transfer_checked"], splNames: ["transfer", "transfer_checked"] },
+  { op: "mint_to", anchorNames: ["mint_to"], splNames: ["mint_to"] },
+  { op: "burn", anchorNames: ["burn"], splNames: ["burn"] },
+  { op: "approve", anchorNames: ["approve"], splNames: ["approve"] },
+  { op: "close_account", anchorNames: ["close_account"], splNames: ["close_account"] },
+  { op: "initialize_account", anchorNames: ["initialize_account"], splNames: ["initialize_account"] }
 ];
 
 export const DEFAULT_BENCHMARK_PROFILE: BenchmarkProfile = {
@@ -213,26 +216,29 @@ export async function scanSourceFiles(files: SourceFile[], options: ScanOptions 
 
   for (const file of files) {
     const source = file.content;
+    const sanitizedSource = sanitizeRustSource(source);
     const lines = source.split(/\r?\n/);
+    const sanitizedLines = sanitizedSource.split(/\r?\n/);
+    const aliases = detectTokenAliases(sanitizedSource);
 
     if (file.relative.endsWith(".json")) {
       collectIdlHints(source, file.relative, idlHints);
     }
 
     for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index] || "";
-      for (const pattern of TOKEN_PATTERNS) {
-        pattern.regex.lastIndex = 0;
-        if (!pattern.regex.test(line)) continue;
-        const compute = benchmarkProfile.operations[pattern.op];
+      const line = sanitizedLines[index] || "";
+      const matches = detectOperationMatches(line, aliases);
+      for (const match of matches) {
+        const compute = benchmarkProfile.operations[match.op];
         findings.push(buildFinding({
           file: file.relative,
           line: index + 1,
-          op: pattern.op,
-          snippet: line.trim(),
+          op: match.op,
+          snippet: (lines[index] || "").trim(),
           legacyCu: compute.legacyCu,
           pTokenCu: compute.pTokenCu,
-          source
+          source: sanitizedSource,
+          kind: match.kind
         }));
       }
     }
@@ -371,7 +377,7 @@ export function buildReportSummary(manifest: Manifest, id?: string): ReportSumma
   };
 }
 
-function buildFinding({ file, line, op, snippet, legacyCu, pTokenCu, source }: BuildFindingInput): Finding {
+function buildFinding({ file, line, op, snippet, legacyCu, pTokenCu, source, kind }: BuildFindingInput): Finding {
   const id = `${file}:${line}:${op}`.replace(/[^a-zA-Z0-9:_./-]/g, "_");
   const risk = classifyRisk(source, snippet);
   const finding: Finding = {
@@ -380,7 +386,7 @@ function buildFinding({ file, line, op, snippet, legacyCu, pTokenCu, source }: B
     line,
     operation: op,
     snippet,
-    confidence: snippet.includes("token::") || snippet.includes("spl_token") ? "high" : "medium",
+    confidence: "high",
     compute: {
       legacyCu,
       pTokenCu,
@@ -392,6 +398,119 @@ function buildFinding({ file, line, op, snippet, legacyCu, pTokenCu, source }: B
   };
   finding.replacementPatch = createReplacementPatch(finding);
   return finding;
+}
+
+function detectOperationMatches(line: string, aliases: string[]): Array<{ op: Operation; kind: PatternKind }> {
+  const matches: Array<{ op: Operation; kind: PatternKind }> = [];
+  for (const pattern of TOKEN_PATTERNS) {
+    if (pattern.anchorNames.some((name) => aliases.some((alias) => callRegex(alias, name).test(line)))) {
+      matches.push({ op: pattern.op, kind: "anchor_cpi" });
+      continue;
+    }
+    if (pattern.splNames.some((name) => callRegex("spl_token::instruction", name).test(line) || aliases.some((alias) => callRegex(alias, name).test(line)))) {
+      matches.push({ op: pattern.op, kind: "spl_instruction" });
+      continue;
+    }
+  }
+  return dedupeMatches(matches);
+}
+
+function detectTokenAliases(source: string): string[] {
+  const aliases = new Set(["token", "anchor_spl::token", "spl_token::instruction"]);
+  const anchorImport = source.match(/use\s+anchor_spl::token\s*::?\s*\{([^}]+)\}/);
+  if (anchorImport?.[1]?.split(",").some((part) => part.trim() === "self")) {
+    aliases.add("token");
+  }
+
+  for (const match of source.matchAll(/use\s+spl_token::instruction\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g)) {
+    aliases.add(match[1]);
+  }
+
+  for (const match of source.matchAll(/use\s+anchor_spl::token\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g)) {
+    aliases.add(match[1]);
+  }
+
+  return Array.from(aliases);
+}
+
+function sanitizeRustSource(source: string): string {
+  let output = "";
+  let inBlockComment = false;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] || "";
+    const next = source[index + 1] || "";
+
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false;
+        output += "  ";
+        index += 1;
+      } else {
+        output += char === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+
+    if (inString) {
+      output += char === "\n" ? "\n" : " ";
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "/" && next === "*") {
+      inBlockComment = true;
+      output += "  ";
+      index += 1;
+      continue;
+    }
+
+    if (char === "/" && next === "/") {
+      while (index < source.length && source[index] !== "\n") {
+        output += " ";
+        index += 1;
+      }
+      if (source[index] === "\n") output += "\n";
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      output += " ";
+      continue;
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
+function callRegex(namespace: string, fnName: string): RegExp {
+  return new RegExp(`\\b${escapeRegex(namespace)}::${escapeRegex(fnName)}\\s*\\(`);
+}
+
+function dedupeMatches(matches: Array<{ op: Operation; kind: PatternKind }>): Array<{ op: Operation; kind: PatternKind }> {
+  const seen = new Set<Operation>();
+  const result: Array<{ op: Operation; kind: PatternKind }> = [];
+  for (const match of matches) {
+    if (seen.has(match.op)) continue;
+    seen.add(match.op);
+    result.push(match);
+  }
+  return result;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function classifyRisk(source: string, snippet: string): Finding["risk"] {
