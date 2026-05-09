@@ -105,6 +105,7 @@ export interface Job {
 
 export interface SaveJobOptions {
   storeManifest?: boolean;
+  retentionLimit?: number;
 }
 
 interface BuildFindingInput {
@@ -291,7 +292,7 @@ export async function saveJob(manifest: Manifest, storePath = "data/jobs.json", 
     job.manifest = manifest;
   }
   jobs.unshift(job);
-  await fs.writeFile(storePath, JSON.stringify(jobs.slice(0, 25), null, 2));
+  await fs.writeFile(storePath, JSON.stringify(jobs.slice(0, options.retentionLimit || 25), null, 2));
   return job;
 }
 

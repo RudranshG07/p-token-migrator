@@ -8,6 +8,8 @@ This service is designed to be safe for public source uploads.
 - Arbitrary server-path scanning is disabled when `NODE_ENV=production`.
 - Uploaded file paths are normalized, path traversal is rejected, and only `.rs`, `.json`, and `.toml` files are scanned.
 - Request bodies are limited by `MAX_BODY_BYTES`.
+- Scan endpoints are rate-limited by IP.
+- Scan endpoints can require `API_KEY` for a controlled beta.
 - The server sets basic hardening headers for content type, referrer, permissions, and same-origin resource policy.
 
 ## Do Not Enable On Public Hosts
@@ -21,7 +23,7 @@ Uploaded source contents are scanned in memory. Public production defaults store
 ## Production Gaps
 
 - Add authentication before accepting private customer projects.
-- Add rate limiting at the edge.
+- Keep app-level rate limiting enabled and add rate limiting at the edge.
 - Move job storage to a database with retention controls.
 - Add audit logs for scan requests.
 - Add malware/file-type validation if archive upload support is added later.

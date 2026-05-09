@@ -24,69 +24,100 @@ const allowServerPathScan = process.env.ALLOW_SERVER_PATH_SCAN === "1" || !isPro
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 10 * 1024 * 1024);
 const jobStorePath = process.env.JOB_STORE_PATH || "data/jobs.json";
 const storeFullManifests = process.env.STORE_FULL_MANIFESTS === "1" || !isProduction;
+const apiKey = process.env.API_KEY || "";
+const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000);
+const rateLimitMax = Number(process.env.RATE_LIMIT_MAX || (isProduction ? 20 : 200));
+const jobRetentionLimit = Number(process.env.JOB_RETENTION_LIMIT || 100);
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
-const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
-  try {
-    setBaseHeaders(res);
-    const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
+export interface RequestPolicyInput {
+  method?: string;
+  pathname: string;
+  client: string;
+  authorization?: string;
+  apiKeyHeader?: string;
+}
 
-    if (req.method === "GET" && url.pathname === "/api/health") {
-      return sendJson(res, {
-        ok: true,
-        mode: isProduction ? "production" : "development",
-        serverPathScan: allowServerPathScan,
-        storeFullManifests,
-        sampleProject: getSampleProjectPath()
-      });
-    }
+export interface RequestPolicyConfig {
+  apiKey?: string;
+  rateLimitWindowMs: number;
+  rateLimitMax: number;
+  now: number;
+  buckets: Map<string, { count: number; resetAt: number }>;
+}
 
-    if (req.method === "GET" && url.pathname === "/api/ready") {
-      await readJobs(jobStorePath);
-      return sendJson(res, { ok: true });
-    }
+export function createServer(): http.Server {
+  return http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    try {
+      setBaseHeaders(res);
+      const url = new URL(req.url || "/", `http://${req.headers.host || `${host}:${port}`}`);
+      enforceRequestPolicy(req, url);
 
-    if (req.method === "GET" && url.pathname === "/api/jobs") {
-      const jobs = await readJobs(jobStorePath);
-      return sendJson(res, { jobs: storeFullManifests ? jobs : jobs.map(stripStoredManifest) });
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/scan") {
-      const body = await readBody<ScanBody>(req);
-      const projectPath = body.projectPath === "sample" || !body.projectPath ? getSampleProjectPath() : body.projectPath;
-      if (projectPath !== getSampleProjectPath() && !allowServerPathScan) {
-        return sendJson(res, { error: "Server path scanning is disabled on this deployment. Upload source files instead." }, 403);
+      if (req.method === "GET" && url.pathname === "/api/health") {
+        return sendJson(res, {
+          ok: true,
+          mode: isProduction ? "production" : "development",
+          serverPathScan: allowServerPathScan,
+          storeFullManifests,
+          authRequired: Boolean(apiKey),
+          rateLimit: {
+            windowMs: rateLimitWindowMs,
+            max: rateLimitMax
+          },
+          sampleProject: getSampleProjectPath()
+        });
       }
-      const manifest = await scanProject(projectPath, { protocol: body.protocol });
-      const job = await saveJob(manifest, jobStorePath, { storeManifest: storeFullManifests });
-      return sendJson(res, { job, manifest });
-    }
 
-    if (req.method === "POST" && url.pathname === "/api/scan-sources") {
-      const body = await readBody<ScanSourcesBody>(req);
-      const files = normalizeUploadedFiles(body.files || []);
-      if (!files.length) {
-        return sendJson(res, { error: "Upload at least one Rust, IDL JSON, or TOML file." }, 400);
+      if (req.method === "GET" && url.pathname === "/api/ready") {
+        await readJobs(jobStorePath);
+        return sendJson(res, { ok: true });
       }
-      const manifest = await scanSourceFiles(files, { protocol: body.protocol || "Uploaded Project" });
-      const job = await saveJob(manifest, jobStorePath, { storeManifest: storeFullManifests });
-      return sendJson(res, { job, manifest });
+
+      if (req.method === "GET" && url.pathname === "/api/jobs") {
+        const jobs = await readJobs(jobStorePath);
+        return sendJson(res, { jobs: storeFullManifests ? jobs : jobs.map(stripStoredManifest) });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/scan") {
+        const body = await readBody<ScanBody>(req);
+        const projectPath = body.projectPath === "sample" || !body.projectPath ? getSampleProjectPath() : body.projectPath;
+        if (projectPath !== getSampleProjectPath() && !allowServerPathScan) {
+          return sendJson(res, { error: "Server path scanning is disabled on this deployment. Upload source files instead." }, 403);
+        }
+        const manifest = await scanProject(projectPath, { protocol: body.protocol });
+        const job = await saveJob(manifest, jobStorePath, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
+        return sendJson(res, { job, manifest });
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/scan-sources") {
+        const body = await readBody<ScanSourcesBody>(req);
+        const files = normalizeUploadedFiles(body.files || []);
+        if (!files.length) {
+          return sendJson(res, { error: "Upload at least one Rust, IDL JSON, or TOML file." }, 400);
+        }
+        const manifest = await scanSourceFiles(files, { protocol: body.protocol || "Uploaded Project" });
+        const job = await saveJob(manifest, jobStorePath, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
+        return sendJson(res, { job, manifest });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/sample") {
+        const manifest = await scanProject(getSampleProjectPath(), { protocol: "Sample Vault" });
+        return sendJson(res, { manifest });
+      }
+
+      return serveStatic(url.pathname, res);
+    } catch (error) {
+      const status = error instanceof ApiError ? error.status : 500;
+      return sendJson(res, { error: error instanceof Error ? error.message : "Unexpected server error" }, status);
     }
+  });
+}
 
-    if (req.method === "GET" && url.pathname === "/api/sample") {
-      const manifest = await scanProject(getSampleProjectPath(), { protocol: "Sample Vault" });
-      return sendJson(res, { manifest });
-    }
-
-    return serveStatic(url.pathname, res);
-  } catch (error) {
-    const status = error instanceof ApiError ? error.status : 500;
-    return sendJson(res, { error: error instanceof Error ? error.message : "Unexpected server error" }, status);
-  }
-});
-
-server.listen(port, host, () => {
-  console.log(`p-token migrator running at http://${host}:${port}`);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  createServer().listen(port, host, () => {
+    console.log(`p-token migrator running at http://${host}:${port}`);
+  });
+}
 
 async function serveStatic(requestPath: string, res: ServerResponse): Promise<void> {
   if (requestPath === "/app.js") {
@@ -111,6 +142,69 @@ async function serveStatic(requestPath: string, res: ServerResponse): Promise<vo
     if (isNodeError(error) && error.code === "ENOENT") return sendText(res, "Not found", 404);
     throw error;
   }
+}
+
+function enforceRequestPolicy(req: IncomingMessage, url: URL): void {
+  applyRequestPolicy({
+    method: req.method,
+    pathname: url.pathname,
+    client: clientKey(req),
+    authorization: req.headers.authorization,
+    apiKeyHeader: headerValue(req.headers["x-api-key"])
+  }, {
+    apiKey,
+    rateLimitWindowMs,
+    rateLimitMax,
+    now: Date.now(),
+    buckets: rateLimitBuckets
+  });
+}
+
+export function applyRequestPolicy(input: RequestPolicyInput, config: RequestPolicyConfig): void {
+  if (isStaticRoute(input.pathname) || isPublicApiRoute(input.method, input.pathname)) return;
+  enforceRateLimit(input.client, config);
+  enforceApiKey(input.authorization, input.apiKeyHeader, config.apiKey || "");
+}
+
+function isStaticRoute(pathname: string): boolean {
+  return !pathname.startsWith("/api/");
+}
+
+function isPublicApiRoute(method: string | undefined, pathname: string): boolean {
+  if (method !== "GET") return false;
+  return ["/api/health", "/api/ready", "/api/jobs", "/api/sample"].includes(pathname);
+}
+
+function enforceApiKey(authorization: string | undefined, apiKeyHeader: string | undefined, apiKey: string): void {
+  if (!apiKey) return;
+  const provided = authorization?.replace(/^Bearer\s+/i, "") || apiKeyHeader || "";
+  if (provided !== apiKey) {
+    throw new ApiError(401, "Missing or invalid API key.");
+  }
+}
+
+function enforceRateLimit(client: string, config: RequestPolicyConfig): void {
+  const bucket = config.buckets.get(client);
+  if (!bucket || bucket.resetAt <= config.now) {
+    config.buckets.set(client, { count: 1, resetAt: config.now + config.rateLimitWindowMs });
+    return;
+  }
+
+  bucket.count += 1;
+  if (bucket.count > config.rateLimitMax) {
+    throw new ApiError(429, "Rate limit exceeded. Try again later.");
+  }
+}
+
+function clientKey(req: IncomingMessage): string {
+  const forwardedFor = headerValue(req.headers["x-forwarded-for"]);
+  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || "unknown";
+  return req.socket.remoteAddress || "unknown";
+}
+
+function headerValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] || "";
+  return value || "";
 }
 
 function normalizeUploadedFiles(files: SourceFile[]): SourceFile[] {
@@ -174,7 +268,7 @@ function stripStoredManifest<T extends { manifest?: unknown }>(job: T): Omit<T, 
   return summary;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
 
   constructor(status: number, message: string) {

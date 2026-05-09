@@ -2,6 +2,18 @@
 
 The public dashboard uses the same API that external tools can call.
 
+If `API_KEY` is set, mutating scan endpoints require either:
+
+```http
+Authorization: Bearer <key>
+```
+
+or:
+
+```http
+X-API-Key: <key>
+```
+
 ## Health
 
 ```http

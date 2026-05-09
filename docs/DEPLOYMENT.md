@@ -28,7 +28,8 @@ docker compose up --build
 - Mount `/app/data` to durable storage or replace the JSON job store with a database.
 - Keep `STORE_FULL_MANIFESTS=0` unless users explicitly agree to persisted source snippets.
 - Set `MAX_BODY_BYTES` to the largest project upload you want to support.
-- Add rate limiting at the reverse proxy or platform edge.
+- Set `RATE_LIMIT_MAX` and also add rate limiting at the reverse proxy or platform edge.
+- Set `API_KEY` if you want to restrict write/scan API access during beta.
 - Set up logs and uptime checks against `/api/ready`.
 
 ## Reverse Proxy
