@@ -14,14 +14,19 @@ ENV RATE_LIMIT_WINDOW_MS=60000
 ENV RATE_LIMIT_MAX=20
 
 COPY package.json README.md submission-readme.txt ./
+COPY package-lock.json tsconfig.json ./
 COPY src ./src
 COPY web ./web
+COPY scripts ./scripts
 COPY samples ./samples
 COPY test ./test
 COPY cli ./cli
 
+RUN npm ci --include=dev
+RUN npm run build
+RUN npm prune --omit=dev
 RUN mkdir -p /app/data
 
 EXPOSE 4173
 
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

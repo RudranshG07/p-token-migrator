@@ -4,18 +4,28 @@ A fullstack toolkit for planning Solana Anchor migrations from legacy SPL Token 
 
 The app includes:
 
-- A browser dashboard for uploading an Anchor project folder, scanning the included sample, or scanning a trusted server path in local mode.
+- A React TSX browser dashboard for uploading an Anchor project folder, scanning the included sample, or scanning a trusted server path in local mode.
 - A TypeScript Node backend API that scans Rust and IDL files, emits a migration manifest, estimates compute-unit savings, and records protocol runs.
 - A Rust CLI with the same core workflow for terminal usage.
-- A TypeScript browser dashboard and an Anchor-style program with SPL Token CPI call sites.
+- A neo-brutalist frontend inspired by `marieooq/neo-brutalism-ui-library`, with high-contrast panels, hard shadows, keyboard-visible controls, and responsive report pages.
 
 ## Run the Fullstack App
 
 ```bash
+npm install
 npm run dev
 ```
 
 Open `http://localhost:4173`.
+
+`npm run dev` builds the TSX frontend into `web-dist/` and starts the TypeScript Node API.
+
+## Build
+
+```bash
+npm run typecheck
+npm run build
+```
 
 ## Deploy
 
@@ -41,6 +51,8 @@ npm run cli -- scan /path/to/anchor/project --out data/manifest.json
 ## Test
 
 ```bash
+npm run typecheck
+npm run build
 npm test
 cargo test --manifest-path cli/Cargo.toml
 ```

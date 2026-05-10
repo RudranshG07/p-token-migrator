@@ -6,12 +6,27 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "node --disable-warning=ExperimentalWarning src/server.ts",
+    "build": "npm run build:frontend",
+    "build:frontend": "node --disable-warning=ExperimentalWarning scripts/build-frontend.ts",
+    "dev": "npm run build:frontend && node --disable-warning=ExperimentalWarning src/server.ts",
+    "start": "node --disable-warning=ExperimentalWarning src/server.ts",
+    "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
     "cli": "cargo run --manifest-path cli/Cargo.toml --",
     "cli:sample": "cargo run --manifest-path cli/Cargo.toml -- scan samples/anchor-token-vault --out data/cli-sample-manifest.json"
   },
   "engines": {
     "node": ">=25"
+  },
+  "dependencies": {
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.1",
+    "esbuild": "^0.27.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3"
   }
 }

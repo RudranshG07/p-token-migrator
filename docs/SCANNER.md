@@ -1,6 +1,6 @@
 # Scanner
 
-The hosted scanner is implemented in `src/migrator.ts`.
+The hosted scanner is implemented in `src/migrator.ts`. The Rust CLI in `cli/src/main.rs` mirrors the same lexical detection model for local scans.
 
 ## Current Detection
 

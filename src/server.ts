@@ -1,6 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { promises as fs } from "node:fs";
-import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSampleProjectPath, loadBenchmarkProfile, scanProject, scanSourceFiles, type BenchmarkProfile, type SourceFile } from "./migrator.ts";
@@ -17,7 +16,8 @@ interface ScanSourcesBody {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const publicDir = path.resolve(__dirname, "../web");
+const sourcePublicDir = path.resolve(__dirname, "../web");
+const builtPublicDir = path.resolve(__dirname, "../web-dist");
 const port = Number(process.env.PORT || 4173);
 const isProduction = process.env.NODE_ENV === "production";
 const host = process.env.HOST || (isProduction ? "0.0.0.0" : "127.0.0.1");
@@ -138,28 +138,9 @@ async function loadConfiguredBenchmarkProfile(): Promise<void> {
 }
 
 async function serveStatic(requestPath: string, res: ServerResponse): Promise<void> {
-  if (requestPath === "/app.js") {
-    const source = await fs.readFile(path.join(publicDir, "app.ts"), "utf8");
-    res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
-    res.end(stripTypeScriptTypes(source, { mode: "strip" }));
-    return;
-  }
+  const publicDir = await staticRoot();
 
-  if (requestPath === "/report.js") {
-    const source = await fs.readFile(path.join(publicDir, "report.ts"), "utf8");
-    res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8" });
-    res.end(stripTypeScriptTypes(source, { mode: "strip" }));
-    return;
-  }
-
-  if (requestPath.startsWith("/reports/")) {
-    const content = await fs.readFile(path.join(publicDir, "report.html"));
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(content);
-    return;
-  }
-
-  const safePath = requestPath === "/" ? "/index.html" : requestPath;
+  const safePath = requestPath === "/" || requestPath.startsWith("/reports/") ? "/index.html" : requestPath;
   const absolute = path.resolve(publicDir, `.${safePath}`);
   if (!absolute.startsWith(publicDir)) {
     return sendText(res, "Not found", 404);
@@ -173,6 +154,15 @@ async function serveStatic(requestPath: string, res: ServerResponse): Promise<vo
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") return sendText(res, "Not found", 404);
     throw error;
+  }
+}
+
+async function staticRoot(): Promise<string> {
+  try {
+    await fs.access(path.join(builtPublicDir, "index.html"));
+    return builtPublicDir;
+  } catch {
+    return sourcePublicDir;
   }
 }
 
@@ -255,6 +245,8 @@ function contentType(file: string): string {
   const ext = path.extname(file);
   if (ext === ".html") return "text/html; charset=utf-8";
   if (ext === ".css") return "text/css; charset=utf-8";
+  if (ext === ".js") return "text/javascript; charset=utf-8";
+  if (ext === ".map") return "application/json; charset=utf-8";
   if (ext === ".json") return "application/json; charset=utf-8";
   return "application/octet-stream";
 }

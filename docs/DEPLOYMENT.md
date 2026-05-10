@@ -4,7 +4,10 @@
 
 ```bash
 cp .env.example .env
-NODE_ENV=production HOST=0.0.0.0 PORT=4173 npm run dev
+npm ci
+npm run typecheck
+npm run build
+NODE_ENV=production HOST=0.0.0.0 PORT=4173 npm run start
 ```
 
 ## Docker
@@ -23,6 +26,7 @@ docker compose up --build
 ## Public Hosting Requirements
 
 - Run with `NODE_ENV=production`.
+- Build the TSX frontend before starting the server so `web-dist/` exists.
 - Keep `ALLOW_SERVER_PATH_SCAN=0`.
 - Put the service behind HTTPS.
 - Mount `/app/data` to durable storage or replace the JSON job store with a database.
