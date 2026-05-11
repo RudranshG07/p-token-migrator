@@ -1,0 +1,9 @@
+[package]
+name = "p-token-shim-anchor"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Transition shim scaffolding for routing Anchor token CPIs between legacy SPL Token and p-token."
+
+[lib]
+path = "src/lib.rs"

@@ -18,3 +18,5 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: cargo test --manifest-path cli/Cargo.toml
+      - run: npm run cli -- scan samples/anchor-token-vault --summary
+      - run: cargo test --manifest-path crates/p-token-shim-anchor/Cargo.toml

@@ -22,6 +22,18 @@ Components:
      programs simultaneously during the transition window.
   5. Migration Dashboard — public CU savings tracker per protocol.
 
+Current implementation status:
+  - IDL Scanner: MVP complete.
+  - p-token Codegen + CU Diff: MVP complete through generated migration
+    bundle, replacement snippets, and explicit CU estimates.
+  - Forked-Mainnet Dry-Run Simulator: deterministic simulator complete;
+    forked-mainnet replay backend is blocked on finalized p-token
+    interfaces and configured fork provider.
+  - Compatibility Shim Anchor Crate: local crate scaffold included under
+    crates/p-token-shim-anchor.
+  - Migration Dashboard + Public Launch: MVP complete with TSX dashboard,
+    upload flow, reports, Docker, CI, and deployment docs.
+
 
 
 
@@ -42,6 +54,5 @@ Number of Solana programs that complete an end-to-end p-token migration
 using the toolkit. Target: 5+ protocols within 60 days of p-token
 mainnet activation. Secondary: aggregate compute units saved across
 migrated programs, measured via on-chain telemetry.
-
 
 

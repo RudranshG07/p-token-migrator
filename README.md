@@ -20,6 +20,13 @@ Open `http://localhost:4173`.
 
 `npm run dev` builds the TSX frontend into `web-dist/` and starts the TypeScript Node API.
 
+Routes:
+
+- `/` landing page
+- `/app` scanner dashboard
+- `/docs` developer docs
+- `/reports/:id` public report
+
 ## Build
 
 ```bash
@@ -42,10 +49,34 @@ If `API_KEY` is configured, users can enter it in the dashboard before starting 
 npm run cli:sample
 ```
 
+Or use the persistent interactive CLI:
+
+```bash
+npm run cli -- interactive
+```
+
+For a guided prompt flow:
+
+```bash
+npm run cli -- wizard
+```
+
 Or scan another local project:
 
 ```bash
 npm run cli -- scan /path/to/anchor/project --out data/manifest.json
+```
+
+Generate a full migration bundle:
+
+```bash
+npm run cli -- scan /path/to/anchor/project --bundle-out data/migration-bundle --summary
+```
+
+Generate SARIF for code scanning:
+
+```bash
+npm run cli -- scan /path/to/anchor/project --sarif-out data/p-token.sarif --summary
 ```
 
 ## Test
@@ -70,8 +101,10 @@ For deployment and API details, see:
 
 - [Deployment](docs/DEPLOYMENT.md)
 - [API](docs/API.md)
+- [CLI](docs/CLI.md)
 - [Security](docs/SECURITY.md)
 - [Storage](docs/STORAGE.md)
 - [Scanner](docs/SCANNER.md)
+- [Milestones](docs/MILESTONES.md)
 
 p-token/SIMD-0266 mainnet behavior is represented by an explicit estimator profile until canonical on-chain program IDs and final interfaces are available.

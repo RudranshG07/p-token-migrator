@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { buildMigrationBundle } from "../src/codegen.ts";
 import { buildReportSummary, DEFAULT_BENCHMARK_PROFILE, getSampleProjectPath, scanProject, scanSourceFiles } from "../src/migrator.ts";
 
 test("sample project produces a migration manifest", async () => {
@@ -11,6 +12,8 @@ test("sample project produces a migration manifest", async () => {
   assert.ok(manifest.totals.savedCu > 0);
   assert.ok(manifest.findings.some((finding) => finding.operation === "transfer"));
   assert.ok(["passed", "review_required"].includes(manifest.simulation.status));
+  assert.equal(manifest.simulation.mode, "deterministic");
+  assert.ok(manifest.milestones.some((milestone) => milestone.name === "Compatibility Shim Anchor Crate"));
 });
 
 test("report summaries do not include source snippets", async () => {
@@ -102,4 +105,21 @@ test("scanner detects aliased token modules", async () => {
   assert.equal(manifest.totals.callSites, 2);
   assert.ok(manifest.findings.some((finding) => finding.operation === "burn"));
   assert.ok(manifest.findings.some((finding) => finding.operation === "approve"));
+});
+
+test("migration bundle contains codegen and shim artifacts", async () => {
+  const manifest = await scanSourceFiles([
+    {
+      relative: "programs/vault/src/lib.rs",
+      content: "pub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
+    }
+  ], { protocol: "Bundle Vault" });
+
+  const bundle = buildMigrationBundle(manifest);
+
+  assert.equal(bundle.protocol, "Bundle Vault");
+  assert.equal(bundle.summary.callSites, 1);
+  assert.ok(bundle.files.some((file) => file.path === "migration-plan.json"));
+  assert.ok(bundle.files.some((file) => file.path === "patches/p-token-replacements.rs" && file.content.includes("p_token_shim::transfer")));
+  assert.ok(bundle.files.some((file) => file.path.includes("p-token-shim-anchor")));
 });

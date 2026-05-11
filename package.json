@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
     "cli": "cargo run --manifest-path cli/Cargo.toml --",
-    "cli:sample": "cargo run --manifest-path cli/Cargo.toml -- scan samples/anchor-token-vault --out data/cli-sample-manifest.json"
+    "cli:sample": "cargo run --manifest-path cli/Cargo.toml -- scan samples/anchor-token-vault --out data/cli-sample-manifest.json",
+    "cli:bundle": "cargo run --manifest-path cli/Cargo.toml -- scan samples/anchor-token-vault --bundle-out data/cli-sample-bundle --summary"
   },
   "engines": {
     "node": ">=25"

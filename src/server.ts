@@ -2,6 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildMigrationBundle } from "./codegen.ts";
 import { getSampleProjectPath, loadBenchmarkProfile, scanProject, scanSourceFiles, type BenchmarkProfile, type SourceFile } from "./migrator.ts";
 import { createFileJobStore } from "./storage.ts";
 
@@ -98,7 +99,7 @@ export function createServer(): http.Server {
         }
         const manifest = await scanProject(projectPath, { protocol: body.protocol, benchmarkProfile });
         const job = await jobStore.save(manifest, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
-        return sendJson(res, { job, manifest });
+        return sendJson(res, { job, manifest, codegen: buildMigrationBundle(manifest) });
       }
 
       if (req.method === "POST" && url.pathname === "/api/scan-sources") {
@@ -109,12 +110,12 @@ export function createServer(): http.Server {
         }
         const manifest = await scanSourceFiles(files, { protocol: body.protocol || "Uploaded Project", benchmarkProfile });
         const job = await jobStore.save(manifest, { storeManifest: storeFullManifests, retentionLimit: jobRetentionLimit });
-        return sendJson(res, { job, manifest });
+        return sendJson(res, { job, manifest, codegen: buildMigrationBundle(manifest) });
       }
 
       if (req.method === "GET" && url.pathname === "/api/sample") {
         const manifest = await scanProject(getSampleProjectPath(), { protocol: "Sample Vault", benchmarkProfile });
-        return sendJson(res, { manifest });
+        return sendJson(res, { manifest, codegen: buildMigrationBundle(manifest) });
       }
 
       return serveStatic(url.pathname, res);
@@ -140,7 +141,7 @@ async function loadConfiguredBenchmarkProfile(): Promise<void> {
 async function serveStatic(requestPath: string, res: ServerResponse): Promise<void> {
   const publicDir = await staticRoot();
 
-  const safePath = requestPath === "/" || requestPath.startsWith("/reports/") ? "/index.html" : requestPath;
+  const safePath = shouldServeAppShell(requestPath) ? "/index.html" : requestPath;
   const absolute = path.resolve(publicDir, `.${safePath}`);
   if (!absolute.startsWith(publicDir)) {
     return sendText(res, "Not found", 404);
@@ -155,6 +156,12 @@ async function serveStatic(requestPath: string, res: ServerResponse): Promise<vo
     if (isNodeError(error) && error.code === "ENOENT") return sendText(res, "Not found", 404);
     throw error;
   }
+}
+
+function shouldServeAppShell(requestPath: string): boolean {
+  if (requestPath === "/") return true;
+  if (requestPath.startsWith("/reports/")) return true;
+  return path.extname(requestPath) === "";
 }
 
 async function staticRoot(): Promise<string> {

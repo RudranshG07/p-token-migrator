@@ -87,10 +87,12 @@ export interface Manifest {
   idlHints: IdlHint[];
   findings: Finding[];
   simulation: SimulationReport;
+  milestones: MilestoneStatus[];
 }
 
 export interface SimulationReport {
   status: SimulationStatus;
+  mode: "deterministic";
   legacyRuns: number;
   pTokenRuns: number;
   divergences: Array<{
@@ -98,6 +100,12 @@ export interface SimulationReport {
     severity: "review";
     reason: string;
   }>;
+}
+
+export interface MilestoneStatus {
+  name: string;
+  status: "complete" | "mvp" | "blocked";
+  evidence: string;
 }
 
 export interface ScanOptions {
@@ -252,7 +260,7 @@ export async function scanSourceFiles(files: SourceFile[], options: ScanOptions 
   }, { legacyCu: 0, pTokenCu: 0, savedCu: 0 });
 
   const simulation = runDryRun(findings, idlHints);
-  return {
+  const manifest: Manifest = {
     schemaVersion: "0.1.0",
     generatedAt: new Date().toISOString(),
     protocol,
@@ -270,8 +278,10 @@ export async function scanSourceFiles(files: SourceFile[], options: ScanOptions 
     },
     idlHints,
     findings,
-    simulation
+    simulation,
+    milestones: buildMilestoneStatus(findings, idlHints, simulation)
   };
+  return manifest;
 }
 
 export async function loadBenchmarkProfile(profilePath: string): Promise<BenchmarkProfile> {
@@ -303,10 +313,41 @@ export function runDryRun(findings: Finding[], idlHints: IdlHint[] = []): Simula
 
   return {
     status: divergences.length ? "review_required" : "passed",
+    mode: "deterministic",
     legacyRuns: findings.length,
     pTokenRuns: findings.length,
     divergences
   };
+}
+
+export function buildMilestoneStatus(findings: Finding[], idlHints: IdlHint[], simulation: SimulationReport): MilestoneStatus[] {
+  return [
+    {
+      name: "IDL Scanner",
+      status: "mvp",
+      evidence: `${findings.length} CPI call sites and ${idlHints.length} IDL hints detected.`
+    },
+    {
+      name: "p-token Codegen + CU Diff",
+      status: "mvp",
+      evidence: `${findings.length} replacement snippets generated with estimated CU savings.`
+    },
+    {
+      name: "Forked-Mainnet Dry-Run Simulator",
+      status: "mvp",
+      evidence: `${simulation.mode} dry-run produced ${simulation.divergences.length} review items.`
+    },
+    {
+      name: "Compatibility Shim Anchor Crate",
+      status: "mvp",
+      evidence: "Local p-token-shim-anchor crate scaffold is included for transition routing."
+    },
+    {
+      name: "Migration Dashboard + Public Launch",
+      status: "mvp",
+      evidence: "TSX dashboard, public report route, Docker, CI, and deployment docs are included."
+    }
+  ];
 }
 
 export function createReplacementPatch(finding: Pick<Finding, "file" | "line" | "operation">): string {
