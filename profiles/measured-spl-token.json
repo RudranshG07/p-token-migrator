@@ -1,0 +1,31 @@
+{
+  "name": "measured-litesvm",
+  "status": "measured-legacy-placeholder-ptoken",
+  "note": "Legacy SPL Token CU values measured via LiteSVM. p-token values are a 96% reduction placeholder until the canonical p-token program is available — replace by re-running cu-bench against p-token.",
+  "operations": {
+    "approve": {
+      "legacyCu": 2904,
+      "pTokenCu": 116
+    },
+    "burn": {
+      "legacyCu": 4800,
+      "pTokenCu": 192
+    },
+    "close_account": {
+      "legacyCu": 3015,
+      "pTokenCu": 121
+    },
+    "initialize_account": {
+      "legacyCu": 4501,
+      "pTokenCu": 180
+    },
+    "mint_to": {
+      "legacyCu": 4492,
+      "pTokenCu": 180
+    },
+    "transfer": {
+      "legacyCu": 4645,
+      "pTokenCu": 186
+    }
+  }
+}

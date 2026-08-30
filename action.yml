@@ -1,0 +1,134 @@
+name: "Solana token-program analysis"
+description: "Scan a Solana program for SPL Token / Token-2022 / p-token CPI sites. Emits a migration manifest and (optionally) SARIF for GitHub code scanning."
+author: "RudyG07"
+branding:
+  icon: search
+  color: purple
+
+inputs:
+  project-path:
+    description: "Directory to scan."
+    required: false
+    default: "."
+  manifest-out:
+    description: "Path to write the manifest JSON."
+    required: false
+    default: "p-token-manifest.json"
+  sarif-out:
+    description: "Path to write SARIF for GitHub code scanning. Leave blank to skip."
+    required: false
+    default: ""
+  profile-path:
+    description: "Path to a benchmark profile JSON (use cu-bench output). Uses the bundled estimator if omitted."
+    required: false
+    default: ""
+  protocol:
+    description: "Protocol name shown in the manifest. Defaults to the directory name."
+    required: false
+    default: ""
+  fail-on-review:
+    description: "Exit non-zero if any finding requires manual review."
+    required: false
+    default: "false"
+  version:
+    description: "Release tag to install (e.g. v0.1.0) or 'latest'."
+    required: false
+    default: "latest"
+
+outputs:
+  manifest-path:
+    description: "Path to the written manifest."
+    value: ${{ steps.scan.outputs.manifest-path }}
+  call-sites:
+    description: "Total number of CPI call sites detected."
+    value: ${{ steps.scan.outputs.call-sites }}
+  saved-cu:
+    description: "Total compute units saved across findings (legacy − target)."
+    value: ${{ steps.scan.outputs.saved-cu }}
+  savings-percent:
+    description: "Percentage CU savings across the scan."
+    value: ${{ steps.scan.outputs.savings-percent }}
+  high-risk-count:
+    description: "Number of findings tagged as high risk."
+    value: ${{ steps.scan.outputs.high-risk-count }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect target triple
+      id: target
+      shell: bash
+      run: |
+        os="$(uname -s)"
+        arch="$(uname -m)"
+        case "$os-$arch" in
+          Linux-x86_64)  triple="x86_64-unknown-linux-gnu" ;;
+          Darwin-arm64)  triple="aarch64-apple-darwin" ;;
+          Darwin-x86_64) triple="aarch64-apple-darwin" ;;   # Rosetta-capable runners get the arm64 build
+          *) echo "::error::unsupported runner: $os-$arch (need a published release for this target)"; exit 1 ;;
+        esac
+        echo "triple=$triple" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve version
+      id: version
+      shell: bash
+      env:
+        REQUESTED: ${{ inputs.version }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ "$REQUESTED" = "latest" ] || [ -z "$REQUESTED" ]; then
+          tag=$(gh release view --repo RudyG07/p-token-migrator --json tagName --jq .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            echo "::error::no published release found — run cargo install or pin --version to a tag"
+            exit 1
+          fi
+        else
+          tag="$REQUESTED"
+        fi
+        echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+    - name: Install sta
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        triple="${{ steps.target.outputs.triple }}"
+        tag="${{ steps.version.outputs.tag }}"
+        dest="$RUNNER_TEMP/p-token-migrator"
+        mkdir -p "$dest"
+        gh release download "$tag" \
+          --repo RudyG07/p-token-migrator \
+          --pattern "sta-$triple.tar.gz" \
+          --pattern "sta-$triple.tar.gz.sha256" \
+          --dir "$dest"
+        (cd "$dest" && shasum -a 256 -c "sta-$triple.tar.gz.sha256")
+        tar -xzf "$dest/sta-$triple.tar.gz" -C "$dest"
+        chmod +x "$dest/sta"
+        echo "$dest" >> "$GITHUB_PATH"
+
+    - name: Run scan
+      id: scan
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.project-path }}
+        MANIFEST_OUT: ${{ inputs.manifest-out }}
+        SARIF_OUT: ${{ inputs.sarif-out }}
+        PROFILE_PATH: ${{ inputs.profile-path }}
+        PROTOCOL: ${{ inputs.protocol }}
+        FAIL_ON_REVIEW: ${{ inputs.fail-on-review }}
+      run: |
+        set -euo pipefail
+        args=(scan "$PROJECT_PATH" --out "$MANIFEST_OUT" --summary)
+        if [ -n "$SARIF_OUT" ]; then args+=(--sarif-out "$SARIF_OUT"); fi
+        if [ -n "$PROFILE_PATH" ]; then args+=(--profile-path "$PROFILE_PATH"); fi
+        if [ -n "$PROTOCOL" ]; then args+=(--protocol "$PROTOCOL"); fi
+        if [ "$FAIL_ON_REVIEW" = "true" ]; then args+=(--fail-on-review); fi
+        sta "${args[@]}"
+
+        manifest="$MANIFEST_OUT"
+        echo "manifest-path=$manifest" >> "$GITHUB_OUTPUT"
+        echo "call-sites=$(jq -r '.totals.callSites' "$manifest")" >> "$GITHUB_OUTPUT"
+        echo "saved-cu=$(jq -r '.totals.savedCu' "$manifest")" >> "$GITHUB_OUTPUT"
+        echo "savings-percent=$(jq -r '.totals.savingsPercent' "$manifest")" >> "$GITHUB_OUTPUT"
+        echo "high-risk-count=$(jq -r '[.findings[] | select(.risk.level == "high")] | length' "$manifest")" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/cu-bench",
+    "crates/p-token-shim-anchor",
+    "crates/replay",
+    "crates/solana-token-analyzer",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/RudyG07/p-token-migrator"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+quote = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+syn = { version = "2", features = ["full", "extra-traits", "visit"] }
+thiserror = "1"
+walkdir = "2"

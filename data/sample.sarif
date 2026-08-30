@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "solana-token-analyzer",
+          "version": "0.1.0",
+          "informationUri": "https://github.com/RudyG07/p-token-migrator",
+          "rules": [
+            {
+              "id": "spl-token-transfer",
+              "name": "SplTokenTransfer",
+              "shortDescription": {
+                "text": "SPL Token `transfer` CPI call site"
+              },
+              "fullDescription": {
+                "text": "Detects an SPL Token `transfer` CPI call site that is a candidate for migration to p-token / verification under Token-2022. The analyzer emits the legacy and target compute-unit costs plus a generated replacement snippet alongside each finding."
+              },
+              "helpUri": "https://github.com/RudyG07/p-token-migrator",
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "spl-token-mint_to",
+              "name": "SplTokenMintTo",
+              "shortDescription": {
+                "text": "SPL Token `mint_to` CPI call site"
+              },
+              "fullDescription": {
+                "text": "Detects an SPL Token `mint_to` CPI call site that is a candidate for migration to p-token / verification under Token-2022. The analyzer emits the legacy and target compute-unit costs plus a generated replacement snippet alongside each finding."
+              },
+              "helpUri": "https://github.com/RudyG07/p-token-migrator",
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "spl-token-burn",
+              "name": "SplTokenBurn",
+              "shortDescription": {
+                "text": "SPL Token `burn` CPI call site"
+              },
+              "fullDescription": {
+                "text": "Detects an SPL Token `burn` CPI call site that is a candidate for migration to p-token / verification under Token-2022. The analyzer emits the legacy and target compute-unit costs plus a generated replacement snippet alongside each finding."
+              },
+              "helpUri": "https://github.com/RudyG07/p-token-migrator",
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "spl-token-approve",
+              "name": "SplTokenApprove",
+              "shortDescription": {
+                "text": "SPL Token `approve` CPI call site"
+              },
+              "fullDescription": {
+                "text": "Detects an SPL Token `approve` CPI call site that is a candidate for migration to p-token / verification under Token-2022. The analyzer emits the legacy and target compute-unit costs plus a generated replacement snippet alongside each finding."
+              },
+              "helpUri": "https://github.com/RudyG07/p-token-migrator",
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "spl-token-close_account",
+              "name": "SplTokenCloseAccount",
+              "shortDescription": {
+                "text": "SPL Token `close_account` CPI call site"
+              },
+              "fullDescription": {
+                "text": "Detects an SPL Token `close_account` CPI call site that is a candidate for migration to p-token / verification under Token-2022. The analyzer emits the legacy and target compute-unit costs plus a generated replacement snippet alongside each finding."
+              },
+              "helpUri": "https://github.com/RudyG07/p-token-migrator",
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "spl-token-initialize_account",
+              "name": "SplTokenInitializeAccount",
+              "shortDescription": {
+                "text": "SPL Token `initialize_account` CPI call site"
+              },
+              "fullDescription": {
+                "text": "Detects an SPL Token `initialize_account` CPI call site that is a candidate for migration to p-token / verification under Token-2022. The analyzer emits the legacy and target compute-unit costs plus a generated replacement snippet alongside each finding."
+              },
+              "helpUri": "https://github.com/RudyG07/p-token-migrator",
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "spl-token-transfer",
+          "level": "error",
+          "message": {
+            "text": "transfer: Signer seeds and a token_program account are present — PDA authority and program-account switching both need manual confirmation.. Legacy CU 5200 → target 220 (saved 4980, 95.8%)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "programs/vault/src/lib.rs"
+                },
+                "region": {
+                  "startLine": 17
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "spl-token-mint_to",
+          "level": "error",
+          "message": {
+            "text": "mint_to: Signer seeds and a token_program account are present — PDA authority and program-account switching both need manual confirmation.. Legacy CU 6100 → target 260 (saved 5840, 95.7%)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "programs/vault/src/lib.rs"
+                },
+                "region": {
+                  "startLine": 30
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "spl-token-burn",
+          "level": "error",
+          "message": {
+            "text": "burn: Signer seeds and a token_program account are present — PDA authority and program-account switching both need manual confirmation.. Legacy CU 5700 → target 250 (saved 5450, 95.6%)."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "programs/vault/src/lib.rs"
+                },
+                "region": {
+                  "startLine": 41
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

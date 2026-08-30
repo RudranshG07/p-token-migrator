@@ -1,5 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildMigrationBundle } from "./codegen.ts";
@@ -25,7 +25,7 @@ const host = process.env.HOST || (isProduction ? "0.0.0.0" : "127.0.0.1");
 const allowServerPathScan = process.env.ALLOW_SERVER_PATH_SCAN === "1" || !isProduction;
 const maxBodyBytes = Number(process.env.MAX_BODY_BYTES || 10 * 1024 * 1024);
 const jobStorePath = process.env.JOB_STORE_PATH || "data/jobs.json";
-const benchmarkProfilePath = process.env.PTOKEN_PROFILE_PATH || "";
+const benchmarkProfilePath = resolveProfilePath();
 const storeFullManifests = process.env.STORE_FULL_MANIFESTS === "1" || !isProduction;
 const apiKey = process.env.API_KEY || "";
 const rateLimitWindowMs = Number(process.env.RATE_LIMIT_WINDOW_MS || 60_000);
@@ -136,6 +136,19 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 async function loadConfiguredBenchmarkProfile(): Promise<void> {
   if (!benchmarkProfilePath) return;
   benchmarkProfile = await loadBenchmarkProfile(benchmarkProfilePath);
+}
+
+function resolveProfilePath(): string {
+  const fromEnv = process.env.PTOKEN_PROFILE_PATH;
+  if (fromEnv !== undefined) return fromEnv;
+  // Default: prefer the measured profile if cu-bench has produced one,
+  // otherwise fall back to the bundled estimator. Either way the engine
+  // remains the source of truth for the numbers it emits.
+  const measured = path.resolve(__dirname, "../profiles/measured-spl-token.json");
+  if (existsSync(measured)) return measured;
+  const estimator = path.resolve(__dirname, "../profiles/simd-0266-estimator.json");
+  if (existsSync(estimator)) return estimator;
+  return "";
 }
 
 async function serveStatic(requestPath: string, res: ServerResponse): Promise<void> {

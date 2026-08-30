@@ -2,21 +2,53 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
-  test:
+  rust:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --workspace --locked
+      - run: cargo test --workspace --locked
+
+  node:
+    runs-on: ubuntu-latest
+    needs: rust
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "25"
+          node-version: "22"
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - run: npm ci
+      - run: npm run build:engine
       - run: npm run typecheck
-      - run: npm run build
       - run: npm test
-      - run: cargo test --manifest-path cli/Cargo.toml
-      - run: npm run cli -- scan samples/anchor-token-vault --summary
-      - run: cargo test --manifest-path crates/p-token-shim-anchor/Cargo.toml
+
+  scan-sample:
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build sta
+        run: cargo build -p solana-token-analyzer --release --locked
+      - name: Scan sample
+        run: |
+          ./target/release/sta scan samples/anchor-token-vault \
+            --out manifest.json \
+            --sarif-out sample.sarif \
+            --summary
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: sample.sarif
+          category: solana-token-analyzer-self-scan
+        # Only on push to main — self-scan PRs would noise up the security tab.
+        if: github.event_name == 'push'

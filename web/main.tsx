@@ -106,17 +106,17 @@ function LandingPage(): React.ReactElement {
   return (
     <>
       <Header
-        eyebrow="p-token migration platform"
-        title="p-token Migration Toolkit"
+        eyebrow="Solana token-program analysis"
+        title="solana-token-analyzer"
         action={<Nav />}
       />
       <main className="shell">
         <section className="landing-hero">
           <div className="landing-copy">
             <p className="stamp">For Solana protocol teams</p>
-            <h2>Audit SPL Token CPI migrations before p-token goes live.</h2>
+            <h2>Static analysis, real CU measurements, and forked-mainnet replay for token-program code paths.</h2>
             <p>
-              A fullstack migration workbench for SIMD-0266 readiness: scan Anchor projects, estimate compute-unit savings, generate review bundles, and gate risky migrations in CI.
+              AST-driven scanner for SPL Token, Token-2022, and p-token CPI sites. LiteSVM-measured compute units. Forked-mainnet replay that diffs your legacy build against a proposed upgrade on real traffic.
             </p>
             <div className="form-actions left">
               <a className="neo-link" href="/app">Launch scanner</a>
@@ -126,51 +126,53 @@ function LandingPage(): React.ReactElement {
           <div className="terminal-card" aria-label="CLI preview">
             <div className="terminal-title">CLI workflow</div>
             <pre>{[
-              "$ npm run cli -- interactive",
-              "p-token> /scan ./protocol",
+              "$ sta scan ./protocol --summary --sarif-out p-token.sarif",
               "files scanned: 128",
-              "call sites: 42",
-              "savings: 95.7%",
-              "p-token> /bundle ./protocol migration-bundle",
-              "migration bundle written"
+              "call sites: 42 (28 anchor_spl::token, 14 token_interface)",
+              "legacy CU: 187,400 → target: 8,820 (95.3%)",
+              "high-risk findings: 6",
+              "",
+              "$ replay --rpc $RPC --program YourProgram... \\",
+              "    --legacy-so target/legacy.so --new-so target/new.so",
+              "25 txs replayed: 23 matched, 2 diverged"
             ].join("\n")}</pre>
           </div>
         </section>
 
         <section className="proof-strip" aria-label="Product proof points">
-          <MetricCard tone="yellow" label="Detected operations" value="6" />
-          <MetricCard tone="cyan" label="Sample savings" value="95.7%" />
-          <MetricCard tone="pink" label="Interfaces" value="Web + CLI + API" />
-          <MetricCard tone="lime" label="Launch mode" value="Docker-ready" />
+          <MetricCard tone="yellow" label="Token programs" value="SPL · 2022 · interface · p-token" />
+          <MetricCard tone="cyan" label="CU source" value="Measured (LiteSVM)" />
+          <MetricCard tone="pink" label="Replay state" value="Forked mainnet + ALT" />
+          <MetricCard tone="lime" label="Distribution" value="CLI · Action · API" />
         </section>
 
         <section className="feature-grid" aria-label="Product capabilities">
-          <FeatureCard title="Scanner" text="Finds Anchor SPL Token CPI calls in Rust, IDL JSON, and TOML, including common aliases." tone="yellow" />
-          <FeatureCard title="CU Diff" text="Shows legacy CU, estimated p-token CU, saved CU, and aggregate savings per protocol." tone="cyan" />
-          <FeatureCard title="Migration Bundle" text="Exports a manifest, replacement snippets, shim notes, and a review plan for dev teams." tone="pink" />
-          <FeatureCard title="CI Gate" text="Provides non-interactive commands and exit codes so unsafe migrations can block builds." tone="lime" />
+          <FeatureCard title="AST scanner" text="syn-based, resolves use-aliases, full-path calls, and token_interface dispatch. Anchor + native + Token-2022." tone="yellow" />
+          <FeatureCard title="Measured CU" text="LiteSVM harness records real compute units per operation. No hardcoded constants. Re-run on every protocol release." tone="cyan" />
+          <FeatureCard title="Forked replay" text="Replay recent mainnet txs against forked account state. Address Lookup Tables resolved, upgradeable programs deployed from chain." tone="pink" />
+          <FeatureCard title="Two-build diff" text="BYO legacy.so and new.so. Each mainnet tx runs against both. Side-by-side outcomes show exactly what changes." tone="lime" />
         </section>
 
         <section className="product-section">
           <div className="section-banner">
             <p className="eyebrow">Why it matters</p>
-            <h2>p-token migrations touch money movement. They need evidence, not vibes.</h2>
+            <h2>Token-program changes touch money movement. They need evidence, not vibes.</h2>
           </div>
           <div className="docs-layout">
             <Panel>
-              <SectionHeading eyebrow="Risk" title="What the toolkit catches" />
+              <SectionHeading eyebrow="Risk" title="What the analyzer surfaces" />
               <div className="step-list">
-                <InfoRow title="Legacy token program references" text="IDL and source references that must be made switchable before rollout." />
-                <InfoRow title="Signer and authority paths" text="High-risk contexts where seeds, authorities, and token accounts need manual review." />
-                <InfoRow title="Checked operations" text="Calls that require decimal parity validation before replacing instruction builders." />
+                <InfoRow title="Token-program version pin" text="Legacy SPL pins, Token-2022 references, and token_interface dispatch sites — flagged with the runtime implication." />
+                <InfoRow title="Signer and authority paths" text="PDA seeds, with_signer chains, and program-account constraints that need manual confirmation under a new program." />
+                <InfoRow title="Checked operations" text="Calls that depend on mint decimal parity — the silent breakage class on token-program swaps." />
               </div>
             </Panel>
             <Panel>
               <SectionHeading eyebrow="Outputs" title="What teams get" />
               <div className="step-list">
-                <InfoRow title="Migration manifest" text="Structured JSON with every finding, line number, risk, and compute estimate." />
-                <InfoRow title="Patch snippets" text="Generated p-token shim replacement guidance grouped into a reviewable file." />
-                <InfoRow title="Public report" text="A shareable summary with CU totals, operation counts, and affected files." />
+                <InfoRow title="Migration manifest" text="JSON with every finding, file, line, risk, and measured CU delta. SARIF available for GitHub code scanning." />
+                <InfoRow title="Replay diff report" text="Per-tx side-by-side: mainnet vs replay vs new build. Divergence list scoped to success / CU / error / log count." />
+                <InfoRow title="GitHub Action" text="uses: RudyG07/p-token-migrator@v0 — drop-in analyzer + SARIF upload + optional fail-on-review gate." />
               </div>
             </Panel>
           </div>
@@ -178,19 +180,19 @@ function LandingPage(): React.ReactElement {
 
         <section className="product-section">
           <div className="section-banner cyan">
-            <p className="eyebrow">Use it three ways</p>
-            <h2>Browser for review. CLI for developers. API for automation.</h2>
+            <p className="eyebrow">Three surfaces, one engine</p>
+            <h2>CLI for developers. GitHub Action for CI. Dashboard for product review.</h2>
           </div>
           <div className="workflow-grid">
-            <FeatureCard title="Web scanner" text="Upload a project folder from the browser and inspect findings without exposing server filesystem paths." tone="yellow" />
-            <FeatureCard title="Interactive CLI" text="Use a persistent prompt with /scan, /bundle, /validate, /last, and /wizard commands." tone="cyan" />
-            <FeatureCard title="API" text="POST source files to /api/scan-sources and consume JSON manifests from any pipeline." tone="pink" />
+            <FeatureCard title="sta CLI" text="cargo install or download the release binary. sta scan, sta scan-sources, --sarif-out, --fail-on-review, --profile-path." tone="yellow" />
+            <FeatureCard title="GitHub Action" text="Composite action wraps the engine. Outputs call-sites, saved-cu, high-risk-count. SARIF feeds GitHub code scanning." tone="cyan" />
+            <FeatureCard title="Dashboard" text="Upload a project folder. View aggregated CU savings, per-file findings, and shareable reports. Backed by the same Rust engine." tone="pink" />
           </div>
         </section>
 
         <section className="cta-band">
           <div>
-            <p className="eyebrow">Ready for review</p>
+            <p className="eyebrow">Try it</p>
             <h2>Start with the sample vault, then scan a real protocol.</h2>
           </div>
           <div className="form-actions">
@@ -206,17 +208,18 @@ function LandingPage(): React.ReactElement {
 function DocsPage(): React.ReactElement {
   return (
     <>
-      <Header eyebrow="Developer docs" title="p-token Migration Toolkit Docs" action={<Nav />} />
+      <Header eyebrow="Developer docs" title="solana-token-analyzer docs" action={<Nav />} />
       <main className="shell">
         <section className="docs-hero">
           <div>
             <p className="stamp">Docs</p>
-            <h2>Everything needed to run, automate, deploy, and judge the product.</h2>
-            <p className="body-copy">The toolkit has three surfaces: TSX web app, Rust CLI, and HTTP API. Use the web UI for demos, CLI for local developer workflows, and API for integrations.</p>
+            <h2>Everything needed to scan, measure, replay, and gate token-program changes.</h2>
+            <p className="body-copy">The platform is three Rust binaries (sta, cu-bench, replay) plus a TypeScript dashboard server. CLI is the source of truth; the dashboard and GitHub Action both shell out to the same engine.</p>
           </div>
           <nav className="docs-toc" aria-label="Docs sections">
             <a href="#quickstart">Quickstart</a>
             <a href="#cli">CLI</a>
+            <a href="#action">GitHub Action</a>
             <a href="#api">API</a>
             <a href="#deployment">Deployment</a>
             <a href="#outputs">Outputs</a>
@@ -225,13 +228,13 @@ function DocsPage(): React.ReactElement {
         </section>
 
         <section id="quickstart" className="doc-block">
-          <SectionHeading eyebrow="Quickstart" title="Run the product locally" />
+          <SectionHeading eyebrow="Quickstart" title="Run the dashboard locally" />
           <div className="docs-layout">
             <Panel>
               <h3 className="doc-title">Install and start</h3>
               <CodeBlock lines={[
                 "npm install",
-                "npm run dev",
+                "npm run dev    # builds the engine + frontend, starts server",
                 "",
                 "# open",
                 "http://127.0.0.1:4173"
@@ -250,27 +253,83 @@ function DocsPage(): React.ReactElement {
         </section>
 
         <section id="cli" className="doc-block">
-          <SectionHeading eyebrow="CLI" title="Interactive and CI workflows" />
+          <SectionHeading eyebrow="CLI" title="Three binaries, one engine" />
           <div className="docs-layout">
             <Panel>
-              <h3 className="doc-title">Interactive session</h3>
+              <h3 className="doc-title">sta — static analyzer</h3>
               <CodeBlock lines={[
-                "npm run cli -- interactive",
-                "p-token> /scan samples/anchor-token-vault",
-                "p-token> /bundle samples/anchor-token-vault data/bundle",
-                "p-token> /validate data/bundle/migration-manifest.json",
-                "p-token> /exit"
+                "sta scan ./protocol --summary",
+                "sta scan ./protocol --out manifest.json \\",
+                "    --sarif-out p-token.sarif",
+                "sta scan ./protocol --profile-path \\",
+                "    profiles/measured-spl-token.json",
+                "sta scan ./protocol --fail-on-review",
+                "",
+                "# Or stream sources via stdin:",
+                "echo '{\"protocol\":\"x\",\"files\":[...]}' | sta scan-sources"
               ]} />
             </Panel>
             <Panel>
-              <h3 className="doc-title">Scriptable mode</h3>
+              <h3 className="doc-title">cu-bench — measure compute units</h3>
               <CodeBlock lines={[
-                "npm run cli -- scan /path/to/project --summary",
-                "npm run cli -- scan /path/to/project --out manifest.json",
-                "npm run cli -- scan /path/to/project --bundle-out migration-bundle",
-                "npm run cli -- scan /path/to/project --sarif-out p-token.sarif",
-                "npm run cli -- validate manifest.json --fail-on-review"
+                "cu-bench --out profiles/measured-spl-token.json",
+                "cu-bench --include-token-2022 \\",
+                "    --out profiles/measured-spl-token.json",
+                "",
+                "# Then sta picks it up via --profile-path."
               ]} />
+            </Panel>
+          </div>
+          <div className="docs-layout">
+            <Panel>
+              <h3 className="doc-title">replay — single-build mode</h3>
+              <CodeBlock lines={[
+                "replay --rpc https://your.rpc.url/ \\",
+                "    --program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA \\",
+                "    --limit 25 --out replay.json"
+              ]} />
+            </Panel>
+            <Panel>
+              <h3 className="doc-title">replay — two-build diff</h3>
+              <CodeBlock lines={[
+                "replay --rpc $RPC --program YourProgram... \\",
+                "    --legacy-so target/legacy.so \\",
+                "    --new-so target/new.so \\",
+                "    --limit 25 --out diff.json",
+                "",
+                "# Each tx runs against both builds.",
+                "# legacyVsNew[] in the report = the diff."
+              ]} />
+            </Panel>
+          </div>
+        </section>
+
+        <section id="action" className="doc-block">
+          <SectionHeading eyebrow="GitHub Action" title="Drop-in CI scan" />
+          <div className="docs-layout">
+            <Panel>
+              <h3 className="doc-title">Minimum workflow</h3>
+              <CodeBlock lines={[
+                "- uses: RudyG07/p-token-migrator@v0",
+                "  with:",
+                "    project-path: .",
+                "    sarif-out: p-token.sarif",
+                "    fail-on-review: 'false'",
+                "",
+                "- uses: github/codeql-action/upload-sarif@v3",
+                "  with:",
+                "    sarif_file: p-token.sarif"
+              ]} />
+            </Panel>
+            <Panel>
+              <h3 className="doc-title">Exposed outputs</h3>
+              <div className="step-list">
+                <InfoRow title="call-sites" text="Total CPI call sites detected." />
+                <InfoRow title="saved-cu" text="Aggregate CU saved (legacy − target)." />
+                <InfoRow title="savings-percent" text="Percentage savings across the scan." />
+                <InfoRow title="high-risk-count" text="Findings tagged for manual review." />
+                <InfoRow title="manifest-path" text="Path to the written manifest JSON." />
+              </div>
             </Panel>
           </div>
         </section>
@@ -331,24 +390,25 @@ function DocsPage(): React.ReactElement {
         </section>
 
         <section id="outputs" className="doc-block">
-          <SectionHeading eyebrow="Outputs" title="What a scan produces" />
+          <SectionHeading eyebrow="Outputs" title="What the engine produces" />
           <div className="feature-grid docs-feature-grid">
-            <FeatureCard title="Manifest" text="Full JSON output with totals, findings, simulation status, milestone evidence, and replacement guidance." tone="yellow" />
-            <FeatureCard title="Migration bundle" text="README, manifest, replacement snippets, and shim usage notes for engineering review." tone="cyan" />
-            <FeatureCard title="Public report" text="Shareable summary with CU totals, operations, risk counts, and affected files." tone="pink" />
-            <FeatureCard title="Exit codes" text="CI-safe behavior with --fail-on-review for high-risk migrations." tone="lime" />
-            <FeatureCard title="SARIF" text="Code scanning output for GitHub and security review workflows." tone="yellow" />
+            <FeatureCard title="Manifest" text="Full JSON output with totals, findings, measured CU per operation, risk classification, and per-finding replacement snippets." tone="yellow" />
+            <FeatureCard title="SARIF" text="GitHub code-scanning compatible report. Inline PR annotations and security-tab integration via codeql-action/upload-sarif." tone="cyan" />
+            <FeatureCard title="Replay report" text="Per-tx outcomes with mainnet vs replay vs new build, and an explicit legacyVsNew divergence list." tone="pink" />
+            <FeatureCard title="Public report" text="Shareable summary with CU totals, operation counts, risk breakdown, and affected files." tone="lime" />
+            <FeatureCard title="Action outputs" text="call-sites, saved-cu, savings-percent, high-risk-count, manifest-path for downstream workflow steps." tone="yellow" />
           </div>
         </section>
 
         <section id="limits" className="doc-block">
-          <SectionHeading eyebrow="Limits" title="What is intentionally conservative" />
+          <SectionHeading eyebrow="Limits" title="What's honest about the current state" />
           <Panel>
             <div className="step-list">
-              <InfoRow title="Lexical scanner" text="The scanner is MVP-grade and does not yet resolve a full Rust AST across crates." />
-              <InfoRow title="Deterministic simulation" text="Forked-mainnet replay is represented by review checks until final p-token program interfaces are available." />
-              <InfoRow title="Shim scaffold" text="The local shim crate provides the transition boundary; final p-token instruction builders must replace scaffold internals." />
-              <InfoRow title="Storage" text="The default JSON job store is suitable for MVP demos. Public production should use durable database or object storage." />
+              <InfoRow title="Single-file AST" text="The syn-based scanner is sound within one file. Cross-file call-graph resolution (helper wrappers calling token CPIs) is the next scanner improvement." />
+              <InfoRow title="Replay signers" text="Non-payer signers can't be impersonated; programs gating on a non-payer signer will fail in replay. Surfaced as divergence signal." />
+              <InfoRow title="Historical state" text="RPC returns finalized account state, not the exact pre-tx slot. Drift is surfaced as a per-tx divergence, not a fatal error." />
+              <InfoRow title="p-token measurements" text="cu-bench currently emits a 96% reduction placeholder for p-token numbers. Real measurements require a canonical p-token program build." />
+              <InfoRow title="Storage" text="The default JSON job store is suitable for self-hosted deployments. Postgres backing is on the roadmap." />
             </div>
           </Panel>
         </section>
@@ -421,16 +481,16 @@ function ScannerPage(): React.ReactElement {
   return (
     <>
       <Header
-        eyebrow="SIMD-0266 migration workspace"
-        title="p-token Migration Toolkit"
+        eyebrow="Scanner workspace"
+        title="solana-token-analyzer"
         action={<div className="header-actions"><Nav /><Button variant="square" onClick={() => void loadJobs(setJobs)} ariaLabel="Refresh jobs">↻</Button></div>}
       />
 
       <main className="shell">
-        <section className="hero-band" aria-label="Migration workspace overview">
+        <section className="hero-band" aria-label="Scanner overview">
           <div>
-            <p className="stamp">Public-ready scanner</p>
-            <h2>Find SPL Token CPI call sites before the p-token rollout.</h2>
+            <p className="stamp">Engine-backed scanner</p>
+            <h2>Find SPL Token, Token-2022, and token_interface call sites with measured CU deltas.</h2>
           </div>
           <div className="hero-stat">
             <span>Mode</span>

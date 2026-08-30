@@ -13,7 +13,7 @@ test("file job store saves, lists, and finds jobs", async () => {
     const manifest = await scanSourceFiles([
       {
         relative: "programs/vault/src/lib.rs",
-        content: "pub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
+        content: "use anchor_spl::token;\npub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
       }
     ], { protocol: "Stored Vault" });
 

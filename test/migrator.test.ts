@@ -13,14 +13,15 @@ test("sample project produces a migration manifest", async () => {
   assert.ok(manifest.findings.some((finding) => finding.operation === "transfer"));
   assert.ok(["passed", "review_required"].includes(manifest.simulation.status));
   assert.equal(manifest.simulation.mode, "deterministic");
-  assert.ok(manifest.milestones.some((milestone) => milestone.name === "Compatibility Shim Anchor Crate"));
+  assert.ok(manifest.milestones.some((milestone) => milestone.name === "AST Scanner"));
+  assert.ok(manifest.findings.every((finding) => finding.tokenProgram === "spl_token"));
 });
 
 test("report summaries do not include source snippets", async () => {
   const manifest = await scanSourceFiles([
     {
       relative: "programs/vault/src/lib.rs",
-      content: "pub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
+      content: "use anchor_spl::token;\npub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
     }
   ], { protocol: "Report Vault" });
 
@@ -38,7 +39,7 @@ test("uploaded sources can be scanned without server filesystem access", async (
   const manifest = await scanSourceFiles([
     {
       relative: "programs/vault/src/lib.rs",
-      content: "pub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
+      content: "use anchor_spl::token;\npub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
     },
     {
       relative: "idls/vault.json",
@@ -60,7 +61,7 @@ test("custom benchmark profiles control compute estimates", async () => {
   const manifest = await scanSourceFiles([
     {
       relative: "programs/vault/src/lib.rs",
-      content: "pub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
+      content: "use anchor_spl::token;\npub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
     }
   ], { protocol: "Profile Vault", benchmarkProfile: profile });
 
@@ -111,7 +112,7 @@ test("migration bundle contains codegen and shim artifacts", async () => {
   const manifest = await scanSourceFiles([
     {
       relative: "programs/vault/src/lib.rs",
-      content: "pub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
+      content: "use anchor_spl::token;\npub fn deposit() { token::transfer(cpi_ctx, amount).unwrap(); }"
     }
   ], { protocol: "Bundle Vault" });
 

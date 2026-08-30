@@ -1,7 +1,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { engineScanProject, engineScanSources } from "./engine.ts";
 
-type Operation =
+// =============================================================================
+// Public types — mirror crates/solana-token-analyzer's manifest.rs JSON shape.
+// =============================================================================
+
+export type Operation =
   | "transfer"
   | "mint_to"
   | "burn"
@@ -9,30 +14,17 @@ type Operation =
   | "close_account"
   | "initialize_account";
 
-type Confidence = "high" | "medium";
-type RiskLevel = "low" | "medium" | "high";
-type SimulationStatus = "passed" | "review_required";
-type PatternKind = "anchor_cpi" | "spl_instruction";
-
-interface TokenPattern {
-  op: Operation;
-  anchorNames: string[];
-  splNames: string[];
-}
+export type Confidence = "high" | "medium";
+export type RiskLevel = "low" | "medium" | "high";
+export type SimulationStatus = "passed" | "review_required";
+export type PatternKind = "anchor_cpi" | "spl_instruction" | "token_interface";
+export type TokenProgram = "spl_token" | "spl_token_2022" | "token_interface" | "unknown";
 
 export interface BenchmarkProfile {
   name: string;
   status: string;
   note: string;
-  operations: Record<Operation, {
-    legacyCu: number;
-    pTokenCu: number;
-  }>;
-}
-
-export interface ProjectFile {
-  absolute: string;
-  relative: string;
+  operations: Record<string, { legacyCu: number; pTokenCu: number }>;
 }
 
 export interface SourceFile {
@@ -42,7 +34,7 @@ export interface SourceFile {
 
 export interface IdlHint {
   file: string;
-  type: "legacy_token_program_reference";
+  type: string;
   message: string;
 }
 
@@ -64,6 +56,22 @@ export interface Finding {
     reason: string;
   };
   replacementPatch: string;
+  tokenProgram?: TokenProgram;
+  patternKind?: PatternKind;
+}
+
+export interface SimulationReport {
+  status: SimulationStatus;
+  mode: string;
+  legacyRuns: number;
+  pTokenRuns: number;
+  divergences: Array<{ findingId: string; severity: string; reason: string }>;
+}
+
+export interface MilestoneStatus {
+  name: string;
+  status: "complete" | "mvp" | "blocked";
+  evidence: string;
 }
 
 export interface Manifest {
@@ -90,27 +98,25 @@ export interface Manifest {
   milestones: MilestoneStatus[];
 }
 
-export interface SimulationReport {
-  status: SimulationStatus;
-  mode: "deterministic";
-  legacyRuns: number;
-  pTokenRuns: number;
-  divergences: Array<{
-    findingId: string;
-    severity: "review";
-    reason: string;
-  }>;
-}
-
-export interface MilestoneStatus {
-  name: string;
-  status: "complete" | "mvp" | "blocked";
-  evidence: string;
-}
-
 export interface ScanOptions {
   protocol?: string;
   benchmarkProfile?: BenchmarkProfile;
+}
+
+export interface SaveJobOptions {
+  storeManifest?: boolean;
+  retentionLimit?: number;
+}
+
+export interface ReportSummary {
+  id?: string;
+  protocol: string;
+  generatedAt: string;
+  totals: Manifest["totals"];
+  simulation: SimulationReport;
+  operations: Record<string, number>;
+  risks: Record<RiskLevel, number>;
+  files: Array<{ file: string; findings: number }>;
 }
 
 export interface Job {
@@ -123,244 +129,64 @@ export interface Job {
   manifest?: Manifest;
 }
 
-export interface ReportSummary {
-  id?: string;
-  protocol: string;
-  generatedAt: string;
-  totals: Manifest["totals"];
-  simulation: SimulationReport;
-  operations: Record<string, number>;
-  risks: Record<RiskLevel, number>;
-  files: Array<{
-    file: string;
-    findings: number;
-  }>;
-}
-
-export interface SaveJobOptions {
-  storeManifest?: boolean;
-  retentionLimit?: number;
-}
-
-interface BuildFindingInput {
-  file: string;
-  line: number;
-  op: Operation;
-  snippet: string;
-  legacyCu: number;
-  pTokenCu: number;
-  source: string;
-  kind: PatternKind;
-}
-
-const TOKEN_PATTERNS: TokenPattern[] = [
-  { op: "transfer", anchorNames: ["transfer", "transfer_checked"], splNames: ["transfer", "transfer_checked"] },
-  { op: "mint_to", anchorNames: ["mint_to"], splNames: ["mint_to"] },
-  { op: "burn", anchorNames: ["burn"], splNames: ["burn"] },
-  { op: "approve", anchorNames: ["approve"], splNames: ["approve"] },
-  { op: "close_account", anchorNames: ["close_account"], splNames: ["close_account"] },
-  { op: "initialize_account", anchorNames: ["initialize_account"], splNames: ["initialize_account"] }
-];
+// =============================================================================
+// Bundled estimator profile — mirrors `default_profile()` in the engine.
+// Kept here so the dashboard can display + override defaults without spawning
+// the binary. Engine treats this profile as the source of truth at scan time.
+// =============================================================================
 
 export const DEFAULT_BENCHMARK_PROFILE: BenchmarkProfile = {
   name: "simd-0266-estimator",
   status: "pre-mainnet-estimate",
-  note: "CU estimates are based on the bundled SIMD-0266 estimator profile until p-token interfaces are finalized.",
+  note: "CU estimates are bundled placeholders until p-token interfaces and a measured profile are available.",
   operations: {
     transfer: { legacyCu: 5200, pTokenCu: 220 },
     mint_to: { legacyCu: 6100, pTokenCu: 260 },
     burn: { legacyCu: 5700, pTokenCu: 250 },
     approve: { legacyCu: 4800, pTokenCu: 210 },
     close_account: { legacyCu: 5000, pTokenCu: 240 },
-    initialize_account: { legacyCu: 7400, pTokenCu: 360 }
-  }
+    initialize_account: { legacyCu: 7400, pTokenCu: 360 },
+  },
 };
 
-const IDL_ACCOUNT_PATTERN = /"name"\s*:\s*"tokenProgram"|"address"\s*:\s*"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"/g;
-const SUPPORTED_EXTENSIONS = new Set([".rs", ".json", ".toml"]);
+// =============================================================================
+// Scanner — delegates to the Rust analyzer binary via src/engine.ts.
+// =============================================================================
 
 export function getSampleProjectPath(): string {
   return path.resolve("samples/anchor-token-vault");
 }
 
-export async function listProjectFiles(rootDir: string): Promise<ProjectFile[]> {
-  const root = path.resolve(rootDir);
-  const files: ProjectFile[] = [];
-
-  async function walk(current: string): Promise<void> {
-    const entries = await fs.readdir(current, { withFileTypes: true });
-    for (const entry of entries) {
-      const absolute = path.join(current, entry.name);
-      const relative = path.relative(root, absolute);
-      if (entry.isDirectory()) {
-        if (["node_modules", "target", ".git", "dist", ".next"].includes(entry.name)) continue;
-        await walk(absolute);
-      } else if (SUPPORTED_EXTENSIONS.has(path.extname(entry.name))) {
-        files.push({ absolute, relative });
-      }
-    }
-  }
-
-  await walk(root);
-  return files;
+export async function scanProject(
+  projectPath: string,
+  options: ScanOptions = {}
+): Promise<Manifest> {
+  return engineScanProject(projectPath, {
+    protocol: options.protocol,
+    benchmarkProfile: options.benchmarkProfile,
+  });
 }
 
-export async function scanProject(projectPath: string, options: ScanOptions = {}): Promise<Manifest> {
-  const root = path.resolve(projectPath);
-  const protocol = options.protocol || inferProtocolName(root);
-  const files = await listProjectFiles(root);
-  const sourceFiles = await Promise.all(files.map(async (file) => ({
-    relative: file.relative,
-    content: await fs.readFile(file.absolute, "utf8")
-  })));
-  return scanSourceFiles(sourceFiles, { protocol, root, benchmarkProfile: options.benchmarkProfile });
+export async function scanSourceFiles(
+  files: SourceFile[],
+  options: ScanOptions = {}
+): Promise<Manifest> {
+  return engineScanSources(files, {
+    protocol: options.protocol,
+    benchmarkProfile: options.benchmarkProfile,
+  });
 }
 
-export async function scanSourceFiles(files: SourceFile[], options: ScanOptions & { root?: string } = {}): Promise<Manifest> {
-  const protocol = options.protocol || "Uploaded Project";
-  const benchmarkProfile = options.benchmarkProfile || DEFAULT_BENCHMARK_PROFILE;
-  const findings: Finding[] = [];
-  const idlHints: IdlHint[] = [];
-
-  for (const file of files) {
-    const source = file.content;
-    const sanitizedSource = sanitizeRustSource(source);
-    const lines = source.split(/\r?\n/);
-    const sanitizedLines = sanitizedSource.split(/\r?\n/);
-    const aliases = detectTokenAliases(sanitizedSource);
-
-    if (file.relative.endsWith(".json")) {
-      collectIdlHints(source, file.relative, idlHints);
-    }
-
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = sanitizedLines[index] || "";
-      const matches = detectOperationMatches(line, aliases);
-      for (const match of matches) {
-        const compute = benchmarkProfile.operations[match.op];
-        findings.push(buildFinding({
-          file: file.relative,
-          line: index + 1,
-          op: match.op,
-          snippet: (lines[index] || "").trim(),
-          legacyCu: compute.legacyCu,
-          pTokenCu: compute.pTokenCu,
-          source: sanitizedSource,
-          kind: match.kind
-        }));
-      }
-    }
-  }
-
-  const totals = findings.reduce((acc, finding) => {
-    acc.legacyCu += finding.compute.legacyCu;
-    acc.pTokenCu += finding.compute.pTokenCu;
-    acc.savedCu += finding.compute.savedCu;
-    return acc;
-  }, { legacyCu: 0, pTokenCu: 0, savedCu: 0 });
-
-  const simulation = runDryRun(findings, idlHints);
-  const manifest: Manifest = {
-    schemaVersion: "0.1.0",
-    generatedAt: new Date().toISOString(),
-    protocol,
-    root: options.root || "uploaded-sources",
-    pTokenProfile: {
-      name: benchmarkProfile.name,
-      status: benchmarkProfile.status,
-      note: benchmarkProfile.note
-    },
-    totals: {
-      ...totals,
-      savingsPercent: totals.legacyCu ? Math.round((totals.savedCu / totals.legacyCu) * 1000) / 10 : 0,
-      callSites: findings.length,
-      filesScanned: files.length
-    },
-    idlHints,
-    findings,
-    simulation,
-    milestones: buildMilestoneStatus(findings, idlHints, simulation)
-  };
-  return manifest;
-}
-
-export async function loadBenchmarkProfile(profilePath: string): Promise<BenchmarkProfile> {
+export async function loadBenchmarkProfile(
+  profilePath: string
+): Promise<BenchmarkProfile> {
   const raw = await fs.readFile(profilePath, "utf8");
-  const parsed = JSON.parse(raw) as BenchmarkProfile;
-  validateBenchmarkProfile(parsed);
-  return parsed;
+  return JSON.parse(raw) as BenchmarkProfile;
 }
 
-export function runDryRun(findings: Finding[], idlHints: IdlHint[] = []): SimulationReport {
-  const divergences: SimulationReport["divergences"] = [];
-  for (const finding of findings) {
-    if (finding.risk.level === "high") {
-      divergences.push({
-        findingId: finding.id,
-        severity: "review",
-        reason: "Authority, signer, or token-program account constraints need manual confirmation."
-      });
-    }
-  }
-
-  if (idlHints.length > 0 && findings.length === 0) {
-    divergences.push({
-      findingId: "idl-only",
-      severity: "review",
-      reason: "IDL references the legacy token program but no Rust CPI call site was found."
-    });
-  }
-
-  return {
-    status: divergences.length ? "review_required" : "passed",
-    mode: "deterministic",
-    legacyRuns: findings.length,
-    pTokenRuns: findings.length,
-    divergences
-  };
-}
-
-export function buildMilestoneStatus(findings: Finding[], idlHints: IdlHint[], simulation: SimulationReport): MilestoneStatus[] {
-  return [
-    {
-      name: "IDL Scanner",
-      status: "mvp",
-      evidence: `${findings.length} CPI call sites and ${idlHints.length} IDL hints detected.`
-    },
-    {
-      name: "p-token Codegen + CU Diff",
-      status: "mvp",
-      evidence: `${findings.length} replacement snippets generated with estimated CU savings.`
-    },
-    {
-      name: "Forked-Mainnet Dry-Run Simulator",
-      status: "mvp",
-      evidence: `${simulation.mode} dry-run produced ${simulation.divergences.length} review items.`
-    },
-    {
-      name: "Compatibility Shim Anchor Crate",
-      status: "mvp",
-      evidence: "Local p-token-shim-anchor crate scaffold is included for transition routing."
-    },
-    {
-      name: "Migration Dashboard + Public Launch",
-      status: "mvp",
-      evidence: "TSX dashboard, public report route, Docker, CI, and deployment docs are included."
-    }
-  ];
-}
-
-export function createReplacementPatch(finding: Pick<Finding, "file" | "line" | "operation">): string {
-  const operation = finding.operation;
-  const accountHint = operation === "transfer" ? "PTokenTransfer" : `PToken${toPascalCase(operation)}`;
-  return [
-    `// ${finding.file}:${finding.line}`,
-    `let ctx = CpiContext::new(ctx.accounts.p_token_program.to_account_info(), ${accountHint} {`,
-    ...replacementAccounts(operation),
-    "});",
-    `p_token_shim::${operation}(ctx, amount)?;`
-  ].join("\n");
-}
+// =============================================================================
+// Job persistence (unchanged — backed by a JSON file on disk for now).
+// =============================================================================
 
 export async function readJobs(storePath = "data/jobs.json"): Promise<Job[]> {
   try {
@@ -372,7 +198,11 @@ export async function readJobs(storePath = "data/jobs.json"): Promise<Job[]> {
   }
 }
 
-export async function saveJob(manifest: Manifest, storePath = "data/jobs.json", options: SaveJobOptions = {}): Promise<Job> {
+export async function saveJob(
+  manifest: Manifest,
+  storePath = "data/jobs.json",
+  options: SaveJobOptions = {}
+): Promise<Job> {
   await fs.mkdir(path.dirname(storePath), { recursive: true });
   const jobs = await readJobs(storePath);
   const id = `job_${Date.now()}`;
@@ -382,13 +212,16 @@ export async function saveJob(manifest: Manifest, storePath = "data/jobs.json", 
     createdAt: manifest.generatedAt,
     totals: manifest.totals,
     simulation: manifest.simulation,
-    report: buildReportSummary(manifest, id)
+    report: buildReportSummary(manifest, id),
   };
   if (options.storeManifest) {
     job.manifest = manifest;
   }
   jobs.unshift(job);
-  await fs.writeFile(storePath, JSON.stringify(jobs.slice(0, options.retentionLimit || 25), null, 2));
+  await fs.writeFile(
+    storePath,
+    JSON.stringify(jobs.slice(0, options.retentionLimit || 25), null, 2)
+  );
   return job;
 }
 
@@ -414,216 +247,8 @@ export function buildReportSummary(manifest: Manifest, id?: string): ReportSumma
     files: Array.from(fileCounts.entries())
       .map(([file, findings]) => ({ file, findings }))
       .sort((a, b) => b.findings - a.findings || a.file.localeCompare(b.file))
-      .slice(0, 20)
+      .slice(0, 20),
   };
-}
-
-function buildFinding({ file, line, op, snippet, legacyCu, pTokenCu, source, kind }: BuildFindingInput): Finding {
-  const id = `${file}:${line}:${op}`.replace(/[^a-zA-Z0-9:_./-]/g, "_");
-  const risk = classifyRisk(source, snippet);
-  const finding: Finding = {
-    id,
-    file,
-    line,
-    operation: op,
-    snippet,
-    confidence: "high",
-    compute: {
-      legacyCu,
-      pTokenCu,
-      savedCu: legacyCu - pTokenCu,
-      savingsPercent: Math.round(((legacyCu - pTokenCu) / legacyCu) * 1000) / 10
-    },
-    risk,
-    replacementPatch: ""
-  };
-  finding.replacementPatch = createReplacementPatch(finding);
-  return finding;
-}
-
-function detectOperationMatches(line: string, aliases: string[]): Array<{ op: Operation; kind: PatternKind }> {
-  const matches: Array<{ op: Operation; kind: PatternKind }> = [];
-  for (const pattern of TOKEN_PATTERNS) {
-    if (pattern.anchorNames.some((name) => aliases.some((alias) => callRegex(alias, name).test(line)))) {
-      matches.push({ op: pattern.op, kind: "anchor_cpi" });
-      continue;
-    }
-    if (pattern.splNames.some((name) => callRegex("spl_token::instruction", name).test(line) || aliases.some((alias) => callRegex(alias, name).test(line)))) {
-      matches.push({ op: pattern.op, kind: "spl_instruction" });
-      continue;
-    }
-  }
-  return dedupeMatches(matches);
-}
-
-function detectTokenAliases(source: string): string[] {
-  const aliases = new Set(["token", "anchor_spl::token", "spl_token::instruction"]);
-  const anchorImport = source.match(/use\s+anchor_spl::token\s*::?\s*\{([^}]+)\}/);
-  if (anchorImport?.[1]?.split(",").some((part) => part.trim() === "self")) {
-    aliases.add("token");
-  }
-
-  for (const match of source.matchAll(/use\s+spl_token::instruction\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g)) {
-    aliases.add(match[1]);
-  }
-
-  for (const match of source.matchAll(/use\s+anchor_spl::token\s+as\s+([A-Za-z_][A-Za-z0-9_]*)\s*;/g)) {
-    aliases.add(match[1]);
-  }
-
-  return Array.from(aliases);
-}
-
-function sanitizeRustSource(source: string): string {
-  let output = "";
-  let inBlockComment = false;
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index] || "";
-    const next = source[index + 1] || "";
-
-    if (inBlockComment) {
-      if (char === "*" && next === "/") {
-        inBlockComment = false;
-        output += "  ";
-        index += 1;
-      } else {
-        output += char === "\n" ? "\n" : " ";
-      }
-      continue;
-    }
-
-    if (inString) {
-      output += char === "\n" ? "\n" : " ";
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === "/" && next === "*") {
-      inBlockComment = true;
-      output += "  ";
-      index += 1;
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      while (index < source.length && source[index] !== "\n") {
-        output += " ";
-        index += 1;
-      }
-      if (source[index] === "\n") output += "\n";
-      continue;
-    }
-
-    if (char === "\"") {
-      inString = true;
-      output += " ";
-      continue;
-    }
-
-    output += char;
-  }
-
-  return output;
-}
-
-function callRegex(namespace: string, fnName: string): RegExp {
-  return new RegExp(`\\b${escapeRegex(namespace)}::${escapeRegex(fnName)}\\s*\\(`);
-}
-
-function dedupeMatches(matches: Array<{ op: Operation; kind: PatternKind }>): Array<{ op: Operation; kind: PatternKind }> {
-  const seen = new Set<Operation>();
-  const result: Array<{ op: Operation; kind: PatternKind }> = [];
-  for (const match of matches) {
-    if (seen.has(match.op)) continue;
-    seen.add(match.op);
-    result.push(match);
-  }
-  return result;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function classifyRisk(source: string, snippet: string): Finding["risk"] {
-  const needsSignerSeeds = /signer|authority|with_signer|seeds/i.test(source);
-  const usesTokenProgramAccount = /token_program/i.test(source);
-  if (needsSignerSeeds && usesTokenProgramAccount) {
-    return { level: "high", reason: "Signer seeds and token program account constraints are present." };
-  }
-  if (usesTokenProgramAccount) {
-    return { level: "medium", reason: "Token program account must be made switchable during rollout." };
-  }
-  if (/checked/i.test(snippet)) {
-    return { level: "medium", reason: "Checked operation requires mint decimal parity validation." };
-  }
-  return { level: "low", reason: "Straightforward CPI call site." };
-}
-
-function collectIdlHints(source: string, file: string, hints: IdlHint[]): void {
-  IDL_ACCOUNT_PATTERN.lastIndex = 0;
-  if (!IDL_ACCOUNT_PATTERN.test(source)) return;
-  hints.push({
-    file,
-    type: "legacy_token_program_reference",
-    message: "IDL contains a legacy SPL Token program account reference."
-  });
-}
-
-function inferProtocolName(root: string): string {
-  return path.basename(root).replace(/[-_]+/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function toPascalCase(value: string): string {
-  return value.split("_").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("");
-}
-
-function replacementAccounts(operation: Operation): string[] {
-  if (operation === "mint_to") {
-    return [
-      "    mint: ctx.accounts.mint.to_account_info(),",
-      "    to: ctx.accounts.destination.to_account_info(),",
-      "    authority: ctx.accounts.authority.to_account_info(),"
-    ];
-  }
-  if (operation === "burn") {
-    return [
-      "    mint: ctx.accounts.mint.to_account_info(),",
-      "    from: ctx.accounts.source.to_account_info(),",
-      "    authority: ctx.accounts.authority.to_account_info(),"
-    ];
-  }
-  if (operation === "close_account") {
-    return [
-      "    account: ctx.accounts.account.to_account_info(),",
-      "    destination: ctx.accounts.destination.to_account_info(),",
-      "    authority: ctx.accounts.authority.to_account_info(),"
-    ];
-  }
-  return [
-    "    source: ctx.accounts.source.to_account_info(),",
-    "    destination: ctx.accounts.destination.to_account_info(),",
-    "    authority: ctx.accounts.authority.to_account_info(),"
-  ];
-}
-
-function validateBenchmarkProfile(profile: BenchmarkProfile): void {
-  const operations: Operation[] = ["transfer", "mint_to", "burn", "approve", "close_account", "initialize_account"];
-  for (const operation of operations) {
-    const entry = profile.operations?.[operation];
-    if (!entry || !Number.isFinite(entry.legacyCu) || !Number.isFinite(entry.pTokenCu)) {
-      throw new Error(`Invalid benchmark profile entry for ${operation}`);
-    }
-  }
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
