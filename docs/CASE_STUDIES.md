@@ -159,7 +159,7 @@ cloning the repos and running the same command.
 
 ```bash
 # Install
-cargo install --git https://github.com/RudyG07/p-token-migrator --bin sta --locked
+cargo install --git https://github.com/RudranshG07/p-token-migrator --bin sta --locked
 
 # marginfi
 git clone --depth 1 https://github.com/mrgnlabs/marginfi-v2.git

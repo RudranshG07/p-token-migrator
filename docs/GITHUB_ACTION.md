@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: analyze
-        uses: RudyG07/p-token-migrator@v0
+        uses: RudranshG07/p-token-migrator@v0
         with:
           project-path: .
           sarif-out: p-token.sarif
@@ -124,7 +124,7 @@ jobs:
       - name: Install solana-token-analyzer
         run: |
           cargo install \
-            --git https://github.com/RudyG07/p-token-migrator \
+            --git https://github.com/RudranshG07/p-token-migrator \
             --bin sta \
             --locked
 
@@ -235,7 +235,7 @@ diff the outcomes. This is the safe-rollout check.
       - name: Install replay
         run: |
           cargo install \
-            --git https://github.com/RudyG07/p-token-migrator \
+            --git https://github.com/RudranshG07/p-token-migrator \
             --bin replay \
             --locked
 

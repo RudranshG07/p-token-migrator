@@ -10,7 +10,7 @@ members = [
 [workspace.package]
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/RudyG07/p-token-migrator"
+repository = "https://github.com/RudranshG07/p-token-migrator"
 
 [workspace.dependencies]
 anyhow = "1"

@@ -77,7 +77,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         if [ "$REQUESTED" = "latest" ] || [ -z "$REQUESTED" ]; then
-          tag=$(gh release view --repo RudyG07/p-token-migrator --json tagName --jq .tagName 2>/dev/null || true)
+          tag=$(gh release view --repo RudranshG07/p-token-migrator --json tagName --jq .tagName 2>/dev/null || true)
           if [ -z "$tag" ]; then
             echo "::error::no published release found — run cargo install or pin --version to a tag"
             exit 1
@@ -98,7 +98,7 @@ runs:
         dest="$RUNNER_TEMP/p-token-migrator"
         mkdir -p "$dest"
         gh release download "$tag" \
-          --repo RudyG07/p-token-migrator \
+          --repo RudranshG07/p-token-migrator \
           --pattern "sta-$triple.tar.gz" \
           --pattern "sta-$triple.tar.gz.sha256" \
           --dir "$dest"
