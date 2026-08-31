@@ -1,5 +1,5 @@
 name: "Solana token-program analysis"
-description: "Scan a Solana program for SPL Token / Token-2022 / p-token CPI sites. Emits a migration manifest and (optionally) SARIF for GitHub code scanning."
+description: "Scan a Solana program for SPL Token / Token-2022 / p-token CPI sites. Emits a migration manifest and SARIF."
 author: "RudyG07"
 branding:
   icon: search
